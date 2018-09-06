@@ -34,7 +34,7 @@ pub enum Interval {
 
 pub trait NextTime {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz>;
-    fn next_start<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz>;
+    fn prev<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz>;
 }
 
 pub(crate) fn parse_time(s: &str) -> Option<NaiveTime> {
@@ -84,17 +84,43 @@ impl RunConfig {
             ..*self
         }
     }
+    fn apply_adjustment<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
+        match self.adjustment {
+            None => from.clone(),
+            Some(Adjustment::Time(ref t)) => {
+                let from_time = from.time();
+                if t > &from_time {
+                    from.date().and_time(t.clone()).unwrap()
+                } else {
+                    (from.date() + Duration::days(1))
+                        .and_time(t.clone())
+                        .unwrap()
+                }
+            }
+            Some(Adjustment::Intervals(ref ivals)) => {
+                let mut rv = from.clone();
+                for ival in ivals {
+                    rv = ival.next(&rv);
+                }
+                rv
+            }
+            _ => unimplemented!(),
+        }
+    }
 }
 
 impl NextTime for RunConfig {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
-        // XXX: This doesn't take adjustment into account
-        // XXX: This doesn't do the right thing for `.every(Monday).at("13:00")` if it's
-        // still before 1 PM on a Monday
-        self.base.next_start(from)
+        let candidate = self.apply_adjustment(&self.base.prev(from));
+        println!("Candidate: {:?}", candidate);
+        if candidate > *from {
+            candidate
+        } else {
+            self.apply_adjustment(&self.base.next(from))
+        }
     }
-    fn next_start<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
-        self.next(from)
+    fn prev<Tz: TimeZone>(&self, _from: &DateTime<Tz>) -> DateTime<Tz> {
+        unimplemented!()
     }
 }
 
@@ -116,33 +142,6 @@ fn day_of_week(i: Interval) -> usize {
 use Interval::*;
 impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
-        match *self {
-            Seconds(s) => from.clone() + Duration::seconds(s as i64),
-            Minutes(m) => from.clone() + Duration::minutes(m as i64),
-            Hours(h) => from.clone() + Duration::hours(h as i64),
-            Days(d) => from.clone() + Duration::days(d as i64),
-            Weeks(w) => from.clone() + Duration::weeks(w as i64),
-            Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
-                let d = from.date();
-                let dow = d.weekday().num_days_from_monday() as usize;
-                let i_dow = day_of_week(*self);
-                let to_shift = DAYS_TO_SHIFT[7 - i_dow + dow];
-                (from.date() + Duration::days(to_shift as i64)).and_hms(0, 0, 0)
-            }
-            Weekday => {
-                let d = from.date();
-                let dow = d.weekday();
-                let days = match dow {
-                    Weekday::Fri => 3,
-                    Weekday::Sat => 2,
-                    _ => 1,
-                };
-                (from.date() + Duration::days(days)).and_hms(0, 0, 0)
-            }
-        }
-    }
-
-    fn next_start<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
             Seconds(s) => {
                 let modulus = from.timestamp() % (s as i64);
@@ -173,7 +172,85 @@ impl NextTime for Interval {
                 let modulus = week_num % w;
                 (start_of_week + Duration::weeks((w - modulus) as i64)).and_hms(0, 0, 0)
             }
-            _ => self.next(from),
+            Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
+                let d = from.date();
+                let dow = d.weekday().num_days_from_monday() as usize;
+                let i_dow = day_of_week(*self);
+                let to_shift = DAYS_TO_SHIFT[7 - i_dow + dow];
+                (from.date() + Duration::days(to_shift as i64)).and_hms(0, 0, 0)
+            }
+            Weekday => {
+                let d = from.date();
+                let dow = d.weekday();
+                let days = match dow {
+                    Weekday::Fri => 3,
+                    Weekday::Sat => 2,
+                    _ => 1,
+                };
+                (from.date() + Duration::days(days)).and_hms(0, 0, 0)
+            }
+        }
+    }
+    fn prev<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
+        match *self {
+            Seconds(s) => {
+                let modulus = from.timestamp() % (s as i64);
+                let modulus = if modulus == 0 { s as i64 } else { modulus };
+                from.clone() - Duration::seconds(modulus as i64)
+            }
+            Minutes(m) => {
+                let s = from.num_seconds_from_midnight();
+                let modulus = s % (m * 60);
+                let modulus = if modulus == 0 { (m * 60) } else { modulus };
+                from.clone() - Duration::seconds(modulus as i64)
+            }
+            Hours(h) => {
+                let s = from.num_seconds_from_midnight();
+                let modulus = s % (h * 3600);
+                let modulus = if modulus == 0 { (h * 3600) } else { modulus };
+                from.clone() - Duration::seconds(modulus as i64)
+            }
+            Days(d) => {
+                let day_of_era = from.num_days_from_ce() as u32;
+                let modulus = day_of_era % d;
+                let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { d } else { modulus };
+                (from.date() - Duration::days(modulus as i64)).and_hms(0, 0, 0)
+            }
+            Weeks(w) => {
+                let d = from.date();
+                let dow = d.weekday().num_days_from_monday();
+                let start_of_week = d.clone() - Duration::days(dow as i64);
+                let days_since_ever = d.num_days_from_ce();
+                let week_num = (days_since_ever / 7) as u32;
+                let modulus = week_num % w;
+                let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { w } else { modulus };
+                (start_of_week - Duration::weeks(modulus as i64)).and_hms(0, 0, 0)
+            }
+            Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
+                let d = from.date();
+                let dow = d.weekday().num_days_from_monday() as i32;
+                let i_dow = day_of_week(*self) as i32;
+                let mut to_shift = if dow >= i_dow {
+                    dow - i_dow
+                } else {
+                    7 + dow - i_dow
+                };
+                if to_shift == 0 && from.num_seconds_from_midnight() == 0 {
+                    to_shift = 7;
+                }
+                
+                (from.date() - Duration::days(to_shift as i64)).and_hms(0, 0, 0)
+            }
+            Weekday => {
+                let d = from.date();
+                let dow = d.weekday();
+                let days = match dow {
+                    Weekday::Sat => 1,
+                    Weekday::Sun => 2,
+                    _ => if from.num_seconds_from_midnight() == 0 { 1 } else { 0 },
+                };
+                (from.date() - Duration::days(days)).and_hms(0, 0, 0)
+            }
         }
     }
 }
@@ -244,89 +321,148 @@ mod tests {
     }
 
     #[test]
-    fn test_next() {
+    fn test_next_start() {
         let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+
         let next_dt = 5.seconds().next(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:18-00:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:15-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = 5.seconds().next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:20-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
-        let next_dt = 13.minutes().next(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:35:13-00:00").unwrap();
+        let next_dt = 15.minutes().next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:30:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = 15.minutes().next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:45:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
         let next_dt = 2.hours().next(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T16:22:13-00:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T16:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = 2.hours().next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T18:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
         let next_dt = 2.days().next(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-06T14:22:13-00:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2018-09-05T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = 2.days().next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-07T00:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
         let next_dt = 2.weeks().next(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-18T14:22:13-00:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2018-09-10T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = 2.weeks().next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-24T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+
+        let next_dt = Monday.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-10T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = Monday.next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-17T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+
+        let next_dt = Wednesday.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-05T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = Wednesday.next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-12T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+
+        let friday = Friday.next(&dt);
+        let next_dt = Weekday.next(&friday);
+        let expected = DateTime::parse_from_rfc3339("2018-09-10T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+        let next_dt = Weekday.next(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-11T00:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
     }
 
     #[test]
-    fn test_next_start() {
+    fn test_prev() {
         let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
 
-        let next_dt = 5.seconds().next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:15-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = 5.seconds().next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:20-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 5.seconds().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:10-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = 5.seconds().prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:05-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
 
-        let next_dt = 15.minutes().next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:30:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = 15.minutes().next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:45:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 1.second().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:12-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        
 
-        let next_dt = 2.hours().next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T16:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = 2.hours().next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-04T18:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 15.minutes().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:15:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = 15.minutes().prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
 
-        let next_dt = 2.days().next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-05T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = 2.days().next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-07T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 1.minute().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
 
-        let next_dt = 2.weeks().next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-10T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = 2.weeks().next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-24T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 2.hours().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = 2.hours().prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T12:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
 
-        let next_dt = Monday.next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-10T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = Monday.next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-17T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 1.hour().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T14:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
 
-        let next_dt = Wednesday.next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-05T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = Wednesday.next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-12T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 2.days().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-03T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = 2.days().prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-09-01T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
 
-        let friday = Friday.next_start(&dt);
-        let next_dt = Weekday.next_start(&friday);
-        let expected = DateTime::parse_from_rfc3339("2018-09-10T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
-        let next_dt = Weekday.next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-11T00:00:00-00:00").unwrap();
-        assert_eq!(next_dt, expected);
+        let prev_dt = 1.day().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+
+        let prev_dt = 2.weeks().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-08-27T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = 2.weeks().prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-08-13T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+
+        let prev_dt = 1.week().prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-03T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+
+        let prev_dt = Monday.prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-03T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = Monday.prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-08-27T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+
+        let prev_dt = Wednesday.prev(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-08-29T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = Wednesday.prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-08-22T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+
+        let saturday = Saturday.prev(&dt);
+        let prev_dt = Weekday.prev(&saturday);
+        let expected = DateTime::parse_from_rfc3339("2018-08-31T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
+        let prev_dt = Weekday.prev(&expected);
+        let expected = DateTime::parse_from_rfc3339("2018-08-30T00:00:00-00:00").unwrap();
+        assert_eq!(prev_dt, expected);
     }
 
     use super::parse_time;
@@ -344,9 +480,14 @@ mod tests {
         assert_eq!(parse_time("2:52 PM"), Some(NaiveTime::from_hms(14, 52, 0)));
     }
 
-    // This doesn't work yet
-    // #[test]
+    #[test]
     fn test_run_config() {
+        let rc = RunConfig::from_interval(1.day()).with_time("15:00");
+        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+        let next_dt = rc.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T15:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+
         let rc = RunConfig::from_interval(Tuesday).with_time("15:00");
         let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
         let next_dt = rc.next(&dt);
@@ -356,6 +497,11 @@ mod tests {
         let rc = RunConfig::from_interval(Tuesday).with_time("14:00");
         let next_dt = rc.next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-11T14:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+
+        let rc = RunConfig::from_interval(Tuesday).with_subinterval(6.hours()).with_subinterval(5.minutes());
+        let next_dt = rc.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-11T06:05:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
     }
 }
