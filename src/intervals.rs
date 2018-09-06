@@ -4,18 +4,31 @@ use chrono::Weekday;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum Interval {
+    /// The next multiple of `n` seconds since the start of the Unix epoch
     Seconds(u32),
+    /// The next multiple of `n` minutes since the start of the day
     Minutes(u32),
+    /// The next multiple of `n` hours since the start of the day
     Hours(u32),
+    /// The next multiple of `n` days since the start of the start of the era
     Days(u32),
+    /// The next multiple of `n` week since the start of the start of the era
     Weeks(u32),
+    /// Every Monday
     Monday,
+    /// Every Tuesday
     Tuesday,
+    /// Every Wednesday
     Wednesday,
+    /// Every Thursday
     Thursday,
+    /// Every Friday
     Friday,
+    /// Every Saturday
     Saturday,
+    /// Every Sunday
     Sunday,
+    /// Every weekday (Monday through Friday)
     Weekday
 }
 
@@ -65,7 +78,11 @@ impl RunConfig {
 
 impl NextTime for RunConfig {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
+        // XXX: This doesn't take adjustment into account
+        // XXX: This doesn't do the right thing for `.every(Monday).at("13:00")` if it's
+        // still before 1 PM on a Monday
         self.base.next_start(from)
+
     }
     fn next_start<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         self.next(from)
@@ -134,8 +151,8 @@ impl NextTime for Interval {
                 from.clone() + Duration::seconds((h * 3600 - modulus) as i64)
             }
             Days(d) => {
-                let day_of_year = from.ordinal0();
-                let modulus = day_of_year % d;
+                let day_of_era = from.num_days_from_ce() as u32;
+                let modulus = day_of_era % d;
                 (from.date() + Duration::days((d - modulus) as i64)).and_hms(0, 0, 0)
             }
             Weeks(w) => {
@@ -152,6 +169,17 @@ impl NextTime for Interval {
     }
 }
 
+/// A trait for easily expressing common intervals. Each method generates an appropriate [Interval].
+/// Plural and non-plural forms behave identically, but exist to make code more grammatical.
+/// ```rust
+/// # use clokwerk::Interval;
+/// # use clokwerk::TimeUnits;
+/// assert_eq!(5.seconds(), Interval::Seconds(5));
+/// assert_eq!(12.minutes(), Interval::Minutes(12));
+/// assert_eq!(2.hours(), Interval::Hours(2));
+/// assert_eq!(3.days(), Interval::Days(3));
+/// assert_eq!(1.week(), Interval::Weeks(1));
+/// ```
 pub trait TimeUnits: Sized {
     fn seconds(self) -> Interval;
     fn minutes(self) -> Interval;
@@ -159,10 +187,10 @@ pub trait TimeUnits: Sized {
     fn days(self) -> Interval;
     fn weeks(self) -> Interval;
     fn second(self) -> Interval { self.seconds() }
-    fn minute(self) -> Interval { self.seconds() }
-    fn hour(self) -> Interval { self.seconds() }
-    fn day(self) -> Interval { self.seconds() }
-    fn week(self) -> Interval { self.seconds() }
+    fn minute(self) -> Interval { self.minutes() }
+    fn hour(self) -> Interval { self.hours() }
+    fn day(self) -> Interval { self.days() }
+    fn week(self) -> Interval { self.weeks() }
 }
 
 impl TimeUnits for u32 {
@@ -187,8 +215,10 @@ impl TimeUnits for u32 {
 mod tests {
     use chrono::prelude::*;
     use Interval::*;
-    use NextTime;
+    use intervals::NextTime;
     use TimeUnits;
+    use RunConfig;
+
     #[test]
     fn basic_units() {
         assert_eq!(Seconds(5), 5.seconds());
@@ -244,10 +274,10 @@ mod tests {
         assert_eq!(next_dt, expected);
 
         let next_dt = 2.days().next_start(&dt);
-        let expected = DateTime::parse_from_rfc3339("2018-09-06T00:00:00-00:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2018-09-05T00:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
         let next_dt = 2.days().next_start(&expected);
-        let expected = DateTime::parse_from_rfc3339("2018-09-08T00:00:00-00:00").unwrap();
+        let expected = DateTime::parse_from_rfc3339("2018-09-07T00:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
         let next_dt = 2.weeks().next_start(&dt);
@@ -287,5 +317,20 @@ mod tests {
         assert_eq!(parse_time("2:52:13 pm"), Some(NaiveTime::from_hms(14, 52, 13)));
         assert_eq!(parse_time("14:52"), Some(NaiveTime::from_hms(14, 52, 0)));
         assert_eq!(parse_time("2:52 PM"), Some(NaiveTime::from_hms(14, 52, 0)));
+    }
+
+    // This doesn't work yet
+    // #[test]
+    fn test_run_config() {
+        let rc = RunConfig::from_interval(Tuesday).with_time("15:00");
+        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+        let next_dt = rc.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-04T15:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
+
+        let rc = RunConfig::from_interval(Tuesday).with_time("14:00");
+        let next_dt = rc.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-11T14:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
     }
 }

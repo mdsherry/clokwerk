@@ -6,14 +6,27 @@ use Interval;
 use std::sync::Arc;
 use Job;
 
+/// Job scheduler
 #[derive(Debug)]
 pub struct Scheduler {
     jobs: Vec<Job>,
 }
 impl Scheduler {
+    /// Create a new scheduler.
     pub fn new() -> Self {
         Scheduler { jobs: vec![] }
     }
+    /// Add a new job to the scheduler to be run on the given interval
+    /// ```rust
+    /// # extern crate clokwerk;
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// let mut scheduler = Scheduler::new();
+    /// scheduler.every(10.minutes()).and(30.seconds()).run(|| println!("Periodic task"));
+    /// scheduler.every(1.day()).at("3:20 pm").run(|| println!("Daily task"));
+    /// scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
+    /// scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
+    /// ```
     pub fn every(&mut self, ival: Interval) -> &mut Job {
         let job = Job::new(ival);
         self.jobs.push(job);
@@ -21,6 +34,20 @@ impl Scheduler {
         &mut self.jobs[last_index]
     }
 
+    /// Run all jobs that should run at this time.
+    /// ```rust
+    /// # extern crate clokwerk;
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// use std::thread;
+    /// use std::time::Duration;
+    /// # let mut scheduler = Scheduler::new();
+    /// loop {
+    ///     scheduler.run_pending();
+    ///     thread::sleep(Duration::from_millis(100));
+    ///     # break
+    /// }
+    /// ```
     pub fn run_pending(&mut self) {
         for job in &mut self.jobs {
             if job.is_pending() {
@@ -29,14 +56,16 @@ impl Scheduler {
         }
     }
 
-    pub fn watch_thread(self) -> ScheduleHandle {
+    /// Start a background thread to call [Scheduler::run_pending()] with the specified frequency.
+    /// The resulting thread fill end cleanly if the returned [ScheduleHandle] is dropped.
+    pub fn watch_thread(self, frequency: Duration) -> ScheduleHandle {
         let stop = Arc::new(AtomicBool::new(false));
         let my_stop = stop.clone();
         let mut me = self;
         let handle = thread::spawn(move || {
             while !stop.load(Ordering::SeqCst) {
                 me.run_pending();
-                thread::sleep(Duration::from_millis(500));
+                thread::sleep(frequency);
             }
         });
         ScheduleHandle {
@@ -46,11 +75,14 @@ impl Scheduler {
     }
 }
 
+/// Guard object for the scheduler background thread. The thread is terminated if this object
+/// is dropped, or [ScheduleHandle::stop()] is called
 pub struct ScheduleHandle {
     stop: Arc<AtomicBool>,
     thread_handle: Option<thread::JoinHandle<()>>,
 }
 impl ScheduleHandle {
+    /// Halt the scheduler background thread
     pub fn stop(self) {}
 }
 

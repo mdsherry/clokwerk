@@ -28,7 +28,7 @@ for _ in 1..10 {
 }
 
 // Or run it in a background thread
-let thread_handle = scheduler.watch_thread();
+let thread_handle = scheduler.watch_thread(Duration::from_millis(100));
 // The scheduler stops when `thread_handle` is dropped, or `stop` is called
 thread_handle.stop();
 ```
