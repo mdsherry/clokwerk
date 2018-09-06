@@ -1,9 +1,9 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use Interval;
-use std::sync::Arc;
 use Job;
 
 /// Job scheduler
@@ -93,7 +93,6 @@ impl Drop for ScheduleHandle {
         handle.unwrap().join().ok();
     }
 }
-
 
 #[cfg(test)]
 mod tests {

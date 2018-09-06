@@ -1,11 +1,11 @@
 use chrono::prelude::*;
-use std::fmt;
-use RunConfig;
-use Interval;
 use intervals::NextTime;
+use std::fmt;
+use Interval;
+use RunConfig;
 
 /// A job to run on the scheduler.
-/// Create these by calling [`Scheduler::every()`](::Scheduler::every). 
+/// Create these by calling [`Scheduler::every()`](::Scheduler::every).
 pub struct Job {
     frequency: RunConfig,
     next_run: Option<DateTime<Local>>,
@@ -76,30 +76,30 @@ impl Job {
             Some(_) => (),
             None => {
                 let now = Local::now();
-                self.next_run = Some(self.frequency.next(&now)); 
+                self.next_run = Some(self.frequency.next(&now));
             }
         };
         self
     }
 
-    /// Test whether a job is scheduled to run again. This is usually only called by 
+    /// Test whether a job is scheduled to run again. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn is_pending(&self) -> bool {
         let now = Local::now();
         match self.next_run {
             Some(dt) => dt <= now,
-            None => false
+            None => false,
         }
     }
 
-    /// Run a task and re-schedule it. This is usually only called by 
+    /// Run a task and re-schedule it. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn execute(&mut self) {
         let now = Local::now();
         match self.job {
             Some(ref mut f) => f(),
-            _ => ()
-        };        
+            _ => (),
+        };
         self.last_run = Some(now.clone());
         self.next_run = Some(self.frequency.next(&now));
     }

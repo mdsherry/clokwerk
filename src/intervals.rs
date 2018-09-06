@@ -29,7 +29,7 @@ pub enum Interval {
     /// Every Sunday
     Sunday,
     /// Every weekday (Monday through Friday)
-    Weekday
+    Weekday,
 }
 
 pub trait NextTime {
@@ -41,38 +41,48 @@ pub(crate) fn parse_time(s: &str) -> Option<NaiveTime> {
     NaiveTime::parse_from_str(s, "%H:%M:%S")
         .or_else(|_| NaiveTime::parse_from_str(s, "%I:%M:%S %p"))
         .or_else(|_| NaiveTime::parse_from_str(s, "%H:%M"))
-        .or_else(|_| NaiveTime::parse_from_str(s, "%I:%M %p")).ok()
+        .or_else(|_| NaiveTime::parse_from_str(s, "%I:%M %p"))
+        .ok()
 }
 
 #[derive(Debug)]
 enum Adjustment {
     Intervals(Vec<Interval>),
-    Time(NaiveTime)
+    Time(NaiveTime),
 }
 
 #[derive(Debug)]
 pub(crate) struct RunConfig {
     base: Interval,
-    adjustment: Option<Adjustment>
+    adjustment: Option<Adjustment>,
 }
 
 impl RunConfig {
     pub fn from_interval(base: Interval) -> Self {
-        RunConfig { base, adjustment: None }
+        RunConfig {
+            base,
+            adjustment: None,
+        }
     }
 
     pub fn with_time(&self, s: &str) -> Self {
-        RunConfig { adjustment: Some(Adjustment::Time(parse_time(s).unwrap())), ..*self }
+        RunConfig {
+            adjustment: Some(Adjustment::Time(parse_time(s).unwrap())),
+            ..*self
+        }
     }
 
     pub fn with_subinterval(&self, ival: Interval) -> Self {
         let mut ival_queue = match self.adjustment {
             None => vec![],
             Some(Adjustment::Time(_)) => vec![],
-            Some(Adjustment::Intervals(ref ivals)) => ivals.clone()
+            Some(Adjustment::Intervals(ref ivals)) => ivals.clone(),
         };
         ival_queue.push(ival);
-        RunConfig { adjustment: Some(Adjustment::Intervals(ival_queue)), ..*self }
+        RunConfig {
+            adjustment: Some(Adjustment::Intervals(ival_queue)),
+            ..*self
+        }
     }
 }
 
@@ -82,7 +92,6 @@ impl NextTime for RunConfig {
         // XXX: This doesn't do the right thing for `.every(Monday).at("13:00")` if it's
         // still before 1 PM on a Monday
         self.base.next_start(from)
-
     }
     fn next_start<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         self.next(from)
@@ -100,7 +109,7 @@ fn day_of_week(i: Interval) -> usize {
         Friday => 4,
         Saturday => 5,
         Sunday => 6,
-        _ => 7
+        _ => 7,
     }
 }
 
@@ -119,14 +128,14 @@ impl NextTime for Interval {
                 let i_dow = day_of_week(*self);
                 let to_shift = DAYS_TO_SHIFT[7 - i_dow + dow];
                 (from.date() + Duration::days(to_shift as i64)).and_hms(0, 0, 0)
-            },
+            }
             Weekday => {
                 let d = from.date();
                 let dow = d.weekday();
                 let days = match dow {
                     Weekday::Fri => 3,
                     Weekday::Sat => 2,
-                    _ => 1
+                    _ => 1,
                 };
                 (from.date() + Duration::days(days)).and_hms(0, 0, 0)
             }
@@ -163,8 +172,8 @@ impl NextTime for Interval {
                 let week_num = (days_since_ever / 7) as u32;
                 let modulus = week_num % w;
                 (start_of_week + Duration::weeks((w - modulus) as i64)).and_hms(0, 0, 0)
-            },
-            _ => self.next(from)
+            }
+            _ => self.next(from),
         }
     }
 }
@@ -186,11 +195,21 @@ pub trait TimeUnits: Sized {
     fn hours(self) -> Interval;
     fn days(self) -> Interval;
     fn weeks(self) -> Interval;
-    fn second(self) -> Interval { self.seconds() }
-    fn minute(self) -> Interval { self.minutes() }
-    fn hour(self) -> Interval { self.hours() }
-    fn day(self) -> Interval { self.days() }
-    fn week(self) -> Interval { self.weeks() }
+    fn second(self) -> Interval {
+        self.seconds()
+    }
+    fn minute(self) -> Interval {
+        self.minutes()
+    }
+    fn hour(self) -> Interval {
+        self.hours()
+    }
+    fn day(self) -> Interval {
+        self.days()
+    }
+    fn week(self) -> Interval {
+        self.weeks()
+    }
 }
 
 impl TimeUnits for u32 {
@@ -214,10 +233,10 @@ impl TimeUnits for u32 {
 #[cfg(test)]
 mod tests {
     use chrono::prelude::*;
-    use Interval::*;
     use intervals::NextTime;
-    use TimeUnits;
+    use Interval::*;
     use RunConfig;
+    use TimeUnits;
 
     #[test]
     fn basic_units() {
@@ -313,8 +332,14 @@ mod tests {
     use super::parse_time;
     #[test]
     fn test_parse_time() {
-        assert_eq!(parse_time("14:52:13"), Some(NaiveTime::from_hms(14, 52, 13)));
-        assert_eq!(parse_time("2:52:13 pm"), Some(NaiveTime::from_hms(14, 52, 13)));
+        assert_eq!(
+            parse_time("14:52:13"),
+            Some(NaiveTime::from_hms(14, 52, 13))
+        );
+        assert_eq!(
+            parse_time("2:52:13 pm"),
+            Some(NaiveTime::from_hms(14, 52, 13))
+        );
         assert_eq!(parse_time("14:52"), Some(NaiveTime::from_hms(14, 52, 0)));
         assert_eq!(parse_time("2:52 PM"), Some(NaiveTime::from_hms(14, 52, 0)));
     }
