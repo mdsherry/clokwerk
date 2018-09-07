@@ -7,7 +7,7 @@ use RunConfig;
 /// A job to run on the scheduler.
 /// Create these by calling [`Scheduler::every()`](::Scheduler::every).
 pub struct Job {
-    frequency: RunConfig,
+    frequency: Vec<RunConfig>,
     next_run: Option<DateTime<Local>>,
     last_run: Option<DateTime<Local>>,
     job: Option<Box<FnMut() + Sync + Send>>,
@@ -26,11 +26,16 @@ impl fmt::Debug for Job {
 impl Job {
     pub(crate) fn new(ival: Interval) -> Self {
         Job {
-            frequency: RunConfig::from_interval(ival),
+            frequency: vec![RunConfig::from_interval(ival)],
             next_run: None,
             last_run: None,
             job: None,
         }
+    }
+
+    fn last_frequency(&mut self) -> &mut RunConfig {
+        let last_idx = self.frequency.len() - 1;
+        &mut self.frequency[last_idx]
     }
 
     /// Specify the time of day when a task should run, e.g.
@@ -43,9 +48,12 @@ impl Job {
     /// scheduler.every(Wednesday).at("6:32:21 PM").run(|| println!("Writing examples is hard"));
     /// ```
     /// Times can be specified with or without seconds, and in either 24-hour or 12-hour time.
-    /// Mutually exclusive with [`Job::and()`].
+    /// Mutually exclusive with [`Job::plus()`].
     pub fn at(&mut self, s: &str) -> &mut Self {
-        self.frequency = self.frequency.with_time(s);
+        {
+            let frequency = self.last_frequency();
+            *frequency = frequency.with_time(s);
+        }
         self
     }
 
@@ -56,13 +64,23 @@ impl Job {
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
     /// scheduler.every(1.day())
-    ///     .and(6.hours())
-    ///     .and(13.minutes())
+    ///     .plus(6.hours())
+    ///     .plus(13.minutes())
     ///   .run(|| println!("Time to wake up!"));
     /// ```
     /// Mutually exclusive with [`Job::at()`].
-    pub fn and(&mut self, ival: Interval) -> &mut Self {
-        self.frequency = self.frequency.with_subinterval(ival);
+    pub fn plus(&mut self, ival: Interval) -> &mut Self {
+        {
+            let frequency = self.last_frequency();
+            *frequency = frequency.with_subinterval(ival);
+        }
+        self
+    }
+
+    /// Add an additional scheduling to the task. All schedules will be considered when determining
+    /// when the task should next run.
+    pub fn and_every(&mut self, ival: Interval) -> &mut Self {
+        self.frequency.push(RunConfig::from_interval(ival));
         self
     }
 
@@ -76,7 +94,7 @@ impl Job {
             Some(_) => (),
             None => {
                 let now = Local::now();
-                self.next_run = Some(self.frequency.next(&now));
+                self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
             }
         };
         self
@@ -101,6 +119,6 @@ impl Job {
             _ => (),
         };
         self.last_run = Some(now.clone());
-        self.next_run = Some(self.frequency.next(&now));
+        self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
     }
 }

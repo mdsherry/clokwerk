@@ -16,7 +16,7 @@ use std::time::Duration;
 // Create a new scheduler
 let mut scheduler = Scheduler::new();
 // Add some tasks to it
-scheduler.every(10.minutes()).and(30.seconds()).run(|| println!("Periodic task"));
+scheduler.every(10.minutes()).plus(30.seconds()).run(|| println!("Periodic task"));
 scheduler.every(1.day()).at("3:20 pm").run(|| println!("Daily task"));
 scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
 scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));

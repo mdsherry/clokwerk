@@ -22,7 +22,7 @@ impl Scheduler {
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
-    /// scheduler.every(10.minutes()).and(30.seconds()).run(|| println!("Periodic task"));
+    /// scheduler.every(10.minutes()).plus(30.seconds()).run(|| println!("Periodic task"));
     /// scheduler.every(1.day()).at("3:20 pm").run(|| println!("Daily task"));
     /// scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
     /// scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
@@ -106,7 +106,7 @@ mod tests {
     //     let mut scheduler = Scheduler::new();
     //     scheduler
     //         .every(10.minutes())
-    //         .and(5.seconds())
+    //         .plus(5.seconds())
     //         .run(|| println!("I'm running!"));
     //     scheduler
     //         .every(3.days())
@@ -122,8 +122,8 @@ mod tests {
     // #[test]
     // fn test_something_else() {
     //     let mut scheduler = Scheduler::new();
-    //     scheduler.every(5.seconds()).run(|| println!("Running!"));
-    //     let handle = scheduler.watch_thread();
+    //     scheduler.every(5.seconds()).and_every(2.seconds()).run(|| println!("Running!"));
+    //     let handle = scheduler.watch_thread(Duration::from_millis(100));
     //     thread::sleep(Duration::from_secs(7));
     //     handle.stop();
     //     thread::sleep(Duration::from_secs(7));

@@ -112,7 +112,6 @@ impl RunConfig {
 impl NextTime for RunConfig {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         let candidate = self.apply_adjustment(&self.base.prev(from));
-        println!("Candidate: {:?}", candidate);
         if candidate > *from {
             candidate
         } else {
