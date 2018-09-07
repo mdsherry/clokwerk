@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::default::Default;
 use std::thread;
 use std::time::Duration;
 use Interval;
@@ -11,10 +12,17 @@ use Job;
 pub struct Scheduler {
     jobs: Vec<Job>,
 }
+
+impl Default for Scheduler {
+    fn default() -> Self {
+        Scheduler { jobs: vec![] }
+    }
+}
+
 impl Scheduler {
     /// Create a new scheduler.
     pub fn new() -> Self {
-        Scheduler { jobs: vec![] }
+        Scheduler::default()
     }
     /// Add a new job to the scheduler to be run on the given interval
     /// ```rust

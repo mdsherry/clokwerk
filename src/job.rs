@@ -114,11 +114,10 @@ impl Job {
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn execute(&mut self) {
         let now = Local::now();
-        match self.job {
-            Some(ref mut f) => f(),
-            _ => (),
-        };
-        self.last_run = Some(now.clone());
+        if let Some(ref mut f) = self.job {
+            f();
+        }
+        self.last_run = Some(now);
         self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
     }
 }

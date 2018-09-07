@@ -89,7 +89,7 @@ impl RunConfig {
             None => from.clone(),
             Some(Adjustment::Time(ref t)) => {
                 let from_time = from.time();
-                if t > &from_time {
+                if *t > from_time {
                     from.date().and_time(t.clone()).unwrap()
                 } else {
                     (from.date() + Duration::days(1))
@@ -142,40 +142,40 @@ impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
             Seconds(s) => {
-                let modulus = from.timestamp() % (s as i64);
+                let modulus = from.timestamp() % (i64::from(s));
                 let next = s - (modulus as u32);
-                from.clone() + Duration::seconds(next as i64)
+                from.clone() + Duration::seconds(i64::from(next))
             }
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s % (m * 60);
-                from.clone() + Duration::seconds((m * 60 - modulus) as i64)
+                from.clone() + Duration::seconds(i64::from(m * 60 - modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s % (h * 3600);
-                from.clone() + Duration::seconds((h * 3600 - modulus) as i64)
+                from.clone() + Duration::seconds(i64::from(h * 3600 - modulus))
             }
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
                 let modulus = day_of_era % d;
-                (from.date() + Duration::days((d - modulus) as i64)).and_hms(0, 0, 0)
+                (from.date() + Duration::days(i64::from(d - modulus))).and_hms(0, 0, 0)
             }
             Weeks(w) => {
                 let d = from.date();
                 let dow = d.weekday().num_days_from_monday();
-                let start_of_week = d.clone() - Duration::days(dow as i64);
+                let start_of_week = d.clone() - Duration::days(i64::from(dow));
                 let days_since_ever = d.num_days_from_ce();
                 let week_num = (days_since_ever / 7) as u32;
                 let modulus = week_num % w;
-                (start_of_week + Duration::weeks((w - modulus) as i64)).and_hms(0, 0, 0)
+                (start_of_week + Duration::weeks(i64::from(w - modulus))).and_hms(0, 0, 0)
             }
             Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
                 let d = from.date();
                 let dow = d.weekday().num_days_from_monday() as usize;
                 let i_dow = day_of_week(*self);
                 let to_shift = DAYS_TO_SHIFT[7 - i_dow + dow];
-                (from.date() + Duration::days(to_shift as i64)).and_hms(0, 0, 0)
+                (from.date() + Duration::days(i64::from(to_shift))).and_hms(0, 0, 0)
             }
             Weekday => {
                 let d = from.date();
@@ -192,37 +192,37 @@ impl NextTime for Interval {
     fn prev<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
             Seconds(s) => {
-                let modulus = from.timestamp() % (s as i64);
-                let modulus = if modulus == 0 { s as i64 } else { modulus };
+                let modulus = from.timestamp() % i64::from(s);
+                let modulus = if modulus == 0 { i64::from(s) } else { modulus };
                 from.clone() - Duration::seconds(modulus as i64)
             }
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s % (m * 60);
                 let modulus = if modulus == 0 { (m * 60) } else { modulus };
-                from.clone() - Duration::seconds(modulus as i64)
+                from.clone() - Duration::seconds(i64::from(modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s % (h * 3600);
                 let modulus = if modulus == 0 { (h * 3600) } else { modulus };
-                from.clone() - Duration::seconds(modulus as i64)
+                from.clone() - Duration::seconds(i64::from(modulus))
             }
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
                 let modulus = day_of_era % d;
                 let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { d } else { modulus };
-                (from.date() - Duration::days(modulus as i64)).and_hms(0, 0, 0)
+                (from.date() - Duration::days(i64::from(modulus))).and_hms(0, 0, 0)
             }
             Weeks(w) => {
                 let d = from.date();
                 let dow = d.weekday().num_days_from_monday();
-                let start_of_week = d.clone() - Duration::days(dow as i64);
+                let start_of_week = d.clone() - Duration::days(i64::from(dow));
                 let days_since_ever = d.num_days_from_ce();
                 let week_num = (days_since_ever / 7) as u32;
                 let modulus = week_num % w;
                 let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { w } else { modulus };
-                (start_of_week - Duration::weeks(modulus as i64)).and_hms(0, 0, 0)
+                (start_of_week - Duration::weeks(i64::from(modulus))).and_hms(0, 0, 0)
             }
             Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
                 let d = from.date();
@@ -237,7 +237,7 @@ impl NextTime for Interval {
                     to_shift = 7;
                 }
                 
-                (from.date() - Duration::days(to_shift as i64)).and_hms(0, 0, 0)
+                (from.date() - Duration::days(i64::from(to_shift))).and_hms(0, 0, 0)
             }
             Weekday => {
                 let d = from.date();
