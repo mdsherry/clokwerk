@@ -104,7 +104,6 @@ impl RunConfig {
                 }
                 rv
             }
-            _ => unimplemented!(),
         }
     }
 }

@@ -2,6 +2,13 @@
 name = "clokwerk"
 version = "0.1.0"
 authors = ["Mark Sherry <mdsherry@gmail.com>"]
+documentation = "http://docs.rs/clokwerk/0.1.0/clokwerk/"
+description="A simple Rust recurring task scheduler, similar to Python's schedule"
+readme = "README.md"
+repository = "https://github.com/mdsherry/clokwerk"
+keywords = ["scheduler", "job"]
+categories = ["date-and-time"]
+license = "Apache 2.0"
 
 [dependencies]
 chrono = "0.4"
