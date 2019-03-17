@@ -7,7 +7,7 @@ parsing cron strings.
 ## Usage
 ```rust
 // Scheduler, and trait for .seconds(), .minutes(), etc.
-use clokwerk::{Scheduler, TimeUnit};
+use clokwerk::{Scheduler, TimeUnits};
 // Import week days and WeekDay
 use clokwerk::Interval::*;
 use std::thread;
