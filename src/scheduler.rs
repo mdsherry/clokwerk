@@ -1,7 +1,7 @@
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::default::Default;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 use Interval;
@@ -9,21 +9,38 @@ use Job;
 
 /// Job scheduler
 #[derive(Debug)]
-pub struct Scheduler {
-    jobs: Vec<Job>,
+pub struct Scheduler<Tz = chrono::Local>
+where
+    Tz: chrono::TimeZone,
+{
+    jobs: Vec<Job<Tz>>,
+    tz: Tz
 }
 
 impl Default for Scheduler {
     fn default() -> Self {
-        Scheduler { jobs: vec![] }
+        Scheduler::<chrono::Local> { jobs: vec![], tz: chrono::Local }
     }
 }
 
 impl Scheduler {
-    /// Create a new scheduler.
+    /// Create a new scheduler. Dates and times will be interpretted using the local timezone
     pub fn new() -> Self {
         Scheduler::default()
     }
+
+
+    /// Create a new scheduler. Dates and times will be interpretted using the specified
+    pub fn with_tz<Tz: chrono::TimeZone>(tz: Tz) -> Scheduler<Tz> {
+        Scheduler { jobs: vec![], tz }
+    }
+}
+
+impl<Tz> Scheduler<Tz> where 
+    Tz: chrono::TimeZone + Sync + Send {
+    
+        
+
     /// Add a new job to the scheduler to be run on the given interval
     /// ```rust
     /// # extern crate clokwerk;
@@ -35,8 +52,8 @@ impl Scheduler {
     /// scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
     /// scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
     /// ```
-    pub fn every(&mut self, ival: Interval) -> &mut Job {
-        let job = Job::new(ival);
+    pub fn every(&mut self, ival: Interval) -> &mut Job<Tz> {
+        let job = Job::<Tz>::new(ival, self.tz.clone());
         self.jobs.push(job);
         let last_index = self.jobs.len() - 1;
         &mut self.jobs[last_index]
@@ -63,6 +80,11 @@ impl Scheduler {
             }
         }
     }
+}
+
+impl<Tz> Scheduler<Tz> where 
+    Tz: chrono::TimeZone + Sync + Send + 'static,
+    <Tz as chrono::TimeZone>::Offset: Send {
 
     /// Start a background thread to call [Scheduler::run_pending()] with the specified frequency.
     /// The resulting thread fill end cleanly if the returned [ScheduleHandle] is dropped.
@@ -105,11 +127,14 @@ impl Drop for ScheduleHandle {
 #[cfg(test)]
 mod tests {
     // use super::Scheduler;
-    // use *;
+
     // use std::thread;
     // use std::time::Duration;
+    // use *;
 
-    // // #[test]
+    // These tests don't actually pass or fail; some of them could be rewritten to, but others are a bit too finicky
+
+    // #[test]
     // fn test_something() {
     //     let mut scheduler = Scheduler::new();
     //     scheduler
@@ -129,11 +154,24 @@ mod tests {
 
     // #[test]
     // fn test_something_else() {
-    //     let mut scheduler = Scheduler::new();
-    //     scheduler.every(5.seconds()).and_every(2.seconds()).run(|| println!("Running!"));
+    //     let mut scheduler = Scheduler::with_tz(chrono::Utc);
+    //     scheduler
+    //         .every(5.seconds())
+    //         .and_every(2.seconds())
+    //         .run(|| println!("Running!"));
     //     let handle = scheduler.watch_thread(Duration::from_millis(100));
     //     thread::sleep(Duration::from_secs(7));
     //     handle.stop();
     //     thread::sleep(Duration::from_secs(7));
+    // }
+
+    // #[test]
+    // fn test_specific_time() {
+    //     let mut scheduler = Scheduler::with_tz(chrono::Utc);
+    //     scheduler.every(crate::intervals::Interval::Wednesday).at("3:57 AM").run(|| println!("UTC scheduling works"));
+    //     let handle = scheduler.watch_thread(Duration::from_millis(100));
+    //     thread::sleep(Duration::from_secs(60));
+    //     handle.stop();
+    //     thread::sleep(Duration::from_secs(60));
     // }
 }

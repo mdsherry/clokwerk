@@ -6,14 +6,15 @@ use RunConfig;
 
 /// A job to run on the scheduler.
 /// Create these by calling [`Scheduler::every()`](::Scheduler::every).
-pub struct Job {
+pub struct Job<Tz = Local> where Tz: TimeZone {
     frequency: Vec<RunConfig>,
-    next_run: Option<DateTime<Local>>,
-    last_run: Option<DateTime<Local>>,
+    next_run: Option<DateTime<Tz>>,
+    last_run: Option<DateTime<Tz>>,
     job: Option<Box<FnMut() + Sync + Send>>,
+    tz: Tz
 }
 
-impl fmt::Debug for Job {
+impl<Tz> fmt::Debug for Job<Tz> where Tz: TimeZone {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -23,13 +24,14 @@ impl fmt::Debug for Job {
     }
 }
 
-impl Job {
-    pub(crate) fn new(ival: Interval) -> Self {
+impl<Tz> Job<Tz> where Tz: chrono::TimeZone {
+    pub(crate) fn new(ival: Interval, tz: Tz) -> Self {
         Job {
             frequency: vec![RunConfig::from_interval(ival)],
             next_run: None,
             last_run: None,
             job: None,
+            tz
         }
     }
 
@@ -93,7 +95,7 @@ impl Job {
         match self.next_run {
             Some(_) => (),
             None => {
-                let now = Local::now();
+                let now = Local::now().with_timezone(&self.tz);
                 self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
             }
         };
@@ -103,9 +105,9 @@ impl Job {
     /// Test whether a job is scheduled to run again. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn is_pending(&self) -> bool {
-        let now = Local::now();
-        match self.next_run {
-            Some(dt) => dt <= now,
+        let now = Local::now().with_timezone(&self.tz);
+        match &self.next_run {
+            Some(dt) => *dt <= now,
             None => false,
         }
     }
@@ -113,11 +115,12 @@ impl Job {
     /// Run a task and re-schedule it. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn execute(&mut self) {
-        let now = Local::now();
+        let now = Local::now().with_timezone(&self.tz);
         if let Some(ref mut f) = self.job {
             f();
         }
-        self.last_run = Some(now);
+        self.last_run = Some(now.clone());
         self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
+        println!("{:?}", self);
     }
 }
