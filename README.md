@@ -4,6 +4,9 @@ Clokwerk is a simple scheduler, inspired by Python's [Schedule](https://schedule
 and Ruby's [clockwork](https://github.com/Rykian/clockwork). It uses a similar DSL for scheduling, rather than
 parsing cron strings.
 
+By default, times and dates are relative to the local timezone, but the scheduler can be made to use a 
+different timezone using the `Scheduler::with_tz` constructor.
+
 ## Usage
 ```rust
 // Scheduler, and trait for .seconds(), .minutes(), etc.
@@ -15,6 +18,8 @@ use std::time::Duration;
 
 // Create a new scheduler
 let mut scheduler = Scheduler::new();
+// or a scheduler with a given timezone
+let mut scheduler = Scheduler::with_tz(chrono::Utc);
 // Add some tasks to it
 scheduler.every(10.minutes()).plus(30.seconds()).run(|| println!("Periodic task"));
 scheduler.every(1.day()).at("3:20 pm").run(|| println!("Daily task"));

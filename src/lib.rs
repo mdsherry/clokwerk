@@ -15,6 +15,8 @@
 //!
 //! // Create a new scheduler
 //! let mut scheduler = Scheduler::new();
+//! // or a scheduler with a given timezone
+//! let mut scheduler = Scheduler::with_tz(chrono::Utc);
 //! // Add some tasks to it
 //! scheduler.every(10.minutes()).plus(30.seconds()).run(|| println!("Periodic task"));
 //! scheduler.every(1.day()).at("3:20 pm").run(|| println!("Daily task"));
