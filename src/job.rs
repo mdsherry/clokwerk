@@ -121,6 +121,5 @@ impl<Tz> Job<Tz> where Tz: chrono::TimeZone {
         }
         self.last_run = Some(now.clone());
         self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
-        println!("{:?}", self);
     }
 }
