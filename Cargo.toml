@@ -1,6 +1,6 @@
 [package]
 name = "clokwerk"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Mark Sherry <mdsherry@gmail.com>"]
 documentation = "http://docs.rs/clokwerk/0.2.0/clokwerk/"
 description="A simple Rust recurring task scheduler, similar to Python's schedule"
