@@ -141,6 +141,12 @@ use Interval::*;
 impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
+            Seconds(x) | Minutes(x) | Hours(x) | Days(x) | Weeks(x) if x == 0 => {
+                return from.clone()
+            }
+            _ => (),
+        }
+        match *self {
             Seconds(s) => {
                 let modulus = from.timestamp().checked_rem(i64::from(s)).unwrap_or(0);
                 let next = s - (modulus as u32);
@@ -191,6 +197,12 @@ impl NextTime for Interval {
     }
     fn prev<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
+            Seconds(x) | Minutes(x) | Hours(x) | Days(x) | Weeks(x) if x == 0 => {
+                return from.clone()
+            }
+            _ => (),
+        }
+        match *self {
             Seconds(s) => {
                 let modulus = from.timestamp().checked_rem(i64::from(s)).unwrap_or(0);
                 let modulus = if modulus == 0 { i64::from(s) } else { modulus };
@@ -211,7 +223,11 @@ impl NextTime for Interval {
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
                 let modulus = day_of_era.checked_rem(d).unwrap_or(0);
-                let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { d } else { modulus };
+                let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 {
+                    d
+                } else {
+                    modulus
+                };
                 (from.date() - Duration::days(i64::from(modulus))).and_hms(0, 0, 0)
             }
             Weeks(w) => {
@@ -221,7 +237,11 @@ impl NextTime for Interval {
                 let days_since_ever = d.num_days_from_ce();
                 let week_num = (days_since_ever / 7) as u32;
                 let modulus = week_num.checked_rem(w).unwrap_or(0);
-                let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { w } else { modulus };
+                let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 {
+                    w
+                } else {
+                    modulus
+                };
                 (start_of_week - Duration::weeks(i64::from(modulus))).and_hms(0, 0, 0)
             }
             Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
@@ -245,7 +265,13 @@ impl NextTime for Interval {
                 let days = match dow {
                     Weekday::Sat => 1,
                     Weekday::Sun => 2,
-                    _ => if from.num_seconds_from_midnight() == 0 { 1 } else { 0 },
+                    _ => {
+                        if from.num_seconds_from_midnight() == 0 {
+                            1
+                        } else {
+                            0
+                        }
+                    }
                 };
                 (from.date() - Duration::days(days)).and_hms(0, 0, 0)
             }
@@ -405,7 +431,6 @@ mod tests {
         let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:12-00:00").unwrap();
         assert_eq!(prev_dt, expected);
 
-
         let prev_dt = 15.minutes().prev(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T14:15:00-00:00").unwrap();
         assert_eq!(prev_dt, expected);
@@ -507,9 +532,27 @@ mod tests {
         let expected = DateTime::parse_from_rfc3339("2018-09-11T14:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
-        let rc = RunConfig::from_interval(Tuesday).with_subinterval(6.hours()).with_subinterval(5.minutes());
+        let rc = RunConfig::from_interval(Tuesday)
+            .with_subinterval(6.hours())
+            .with_subinterval(5.minutes());
         let next_dt = rc.next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-11T06:05:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
     }
+
+    #[test]
+    fn test_division_by_zero() {
+        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+        assert_eq!(0.seconds().next(&dt), dt, "next 0 seconds");
+        assert_eq!(0.seconds().prev(&dt), dt, "previous 0 seconds");
+        assert_eq!(0.minutes().next(&dt), dt, "next 0 minutes");
+        assert_eq!(0.minutes().prev(&dt), dt, "prev 0 minutes");
+        assert_eq!(0.hours().next(&dt), dt, "next 0 hours");
+        assert_eq!(0.hours().prev(&dt), dt, "prev 0 hours");
+        assert_eq!(0.days().next(&dt), dt, "next 0 days");
+        assert_eq!(0.days().prev(&dt), dt, "prev 0 days");
+        assert_eq!(0.weeks().next(&dt), dt, "next 0 weeks");
+        assert_eq!(0.weeks().prev(&dt), dt, "prev 0 weeks");
+    }
+
 }
