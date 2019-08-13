@@ -142,23 +142,23 @@ impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
             Seconds(s) => {
-                let modulus = from.timestamp() % (i64::from(s));
+                let modulus = from.timestamp().checked_rem(i64::from(s)).unwrap_or(0);
                 let next = s - (modulus as u32);
                 from.clone() + Duration::seconds(i64::from(next))
             }
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
-                let modulus = s % (m * 60);
+                let modulus = s.checked_rem(m * 60).unwrap_or(0);
                 from.clone() + Duration::seconds(i64::from(m * 60 - modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
-                let modulus = s % (h * 3600);
+                let modulus = s.checked_rem(h * 3600).unwrap_or(0);
                 from.clone() + Duration::seconds(i64::from(h * 3600 - modulus))
             }
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
-                let modulus = day_of_era % d;
+                let modulus = day_of_era.checked_rem(d).unwrap_or(0);
                 (from.date() + Duration::days(i64::from(d - modulus))).and_hms(0, 0, 0)
             }
             Weeks(w) => {
@@ -167,7 +167,7 @@ impl NextTime for Interval {
                 let start_of_week = d.clone() - Duration::days(i64::from(dow));
                 let days_since_ever = d.num_days_from_ce();
                 let week_num = (days_since_ever / 7) as u32;
-                let modulus = week_num % w;
+                let modulus = week_num.checked_rem(w).unwrap_or(0);
                 (start_of_week + Duration::weeks(i64::from(w - modulus))).and_hms(0, 0, 0)
             }
             Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => {
@@ -192,25 +192,25 @@ impl NextTime for Interval {
     fn prev<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
             Seconds(s) => {
-                let modulus = from.timestamp() % i64::from(s);
+                let modulus = from.timestamp().checked_rem(i64::from(s)).unwrap_or(0);
                 let modulus = if modulus == 0 { i64::from(s) } else { modulus };
                 from.clone() - Duration::seconds(modulus as i64)
             }
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
-                let modulus = s % (m * 60);
+                let modulus = s.checked_rem(m * 60).unwrap_or(0);
                 let modulus = if modulus == 0 { (m * 60) } else { modulus };
                 from.clone() - Duration::seconds(i64::from(modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
-                let modulus = s % (h * 3600);
+                let modulus = s.checked_rem(h * 3600).unwrap_or(0);
                 let modulus = if modulus == 0 { (h * 3600) } else { modulus };
                 from.clone() - Duration::seconds(i64::from(modulus))
             }
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
-                let modulus = day_of_era % d;
+                let modulus = day_of_era.checked_rem(d).unwrap_or(0);
                 let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { d } else { modulus };
                 (from.date() - Duration::days(i64::from(modulus))).and_hms(0, 0, 0)
             }
@@ -220,7 +220,7 @@ impl NextTime for Interval {
                 let start_of_week = d.clone() - Duration::days(i64::from(dow));
                 let days_since_ever = d.num_days_from_ce();
                 let week_num = (days_since_ever / 7) as u32;
-                let modulus = week_num % w;
+                let modulus = week_num.checked_rem(w).unwrap_or(0);
                 let modulus = if modulus == 0 && from.num_seconds_from_midnight() == 0 { w } else { modulus };
                 (start_of_week - Duration::weeks(i64::from(modulus))).and_hms(0, 0, 0)
             }
@@ -236,7 +236,7 @@ impl NextTime for Interval {
                 if to_shift == 0 && from.num_seconds_from_midnight() == 0 {
                     to_shift = 7;
                 }
-                
+
                 (from.date() - Duration::days(i64::from(to_shift))).and_hms(0, 0, 0)
             }
             Weekday => {
@@ -316,6 +316,16 @@ mod tests {
     #[test]
     fn basic_units() {
         assert_eq!(Seconds(5), 5.seconds());
+        assert_eq!(Minutes(5), 5.minutes());
+        assert_eq!(Hours(5), 5.hours());
+        assert_eq!(Days(5), 5.days());
+        assert_eq!(Weeks(5), 5.weeks());
+
+        assert_eq!(Seconds(0), 0.seconds());
+        assert_eq!(Minutes(0), 0.minutes());
+        assert_eq!(Hours(0), 0.hours());
+        assert_eq!(Days(0), 0.days());
+        assert_eq!(Weeks(0), 0.weeks());
     }
 
     #[test]
@@ -394,7 +404,7 @@ mod tests {
         let prev_dt = 1.second().prev(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:12-00:00").unwrap();
         assert_eq!(prev_dt, expected);
-        
+
 
         let prev_dt = 15.minutes().prev(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T14:15:00-00:00").unwrap();
