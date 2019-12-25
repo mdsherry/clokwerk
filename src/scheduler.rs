@@ -1,25 +1,32 @@
+use crate::timeprovider::{ChronoTimeProvider, TimeProvider};
 use std::default::Default;
+use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use Interval;
 use Job;
-
 /// Job scheduler
 #[derive(Debug)]
-pub struct Scheduler<Tz = chrono::Local>
+pub struct Scheduler<Tz = chrono::Local, Tp = ChronoTimeProvider>
 where
     Tz: chrono::TimeZone,
+    Tp: TimeProvider,
 {
-    jobs: Vec<Job<Tz>>,
-    tz: Tz
+    jobs: Vec<Job<Tz, Tp>>,
+    tz: Tz,
+    _tp: PhantomData<Tp>,
 }
 
 impl Default for Scheduler {
     fn default() -> Self {
-        Scheduler::<chrono::Local> { jobs: vec![], tz: chrono::Local }
+        Scheduler::<chrono::Local> {
+            jobs: vec![],
+            tz: chrono::Local,
+            _tp: PhantomData,
+        }
     }
 }
 
@@ -29,18 +36,31 @@ impl Scheduler {
         Scheduler::default()
     }
 
-
     /// Create a new scheduler. Dates and times will be interpretted using the specified
     pub fn with_tz<Tz: chrono::TimeZone>(tz: Tz) -> Scheduler<Tz> {
-        Scheduler { jobs: vec![], tz }
+        Scheduler {
+            jobs: vec![],
+            tz,
+            _tp: PhantomData,
+        }
+    }
+
+    pub fn with_tz_and_provider<Tz: chrono::TimeZone, Tp: TimeProvider>(
+        tz: Tz,
+    ) -> Scheduler<Tz, Tp> {
+        Scheduler {
+            jobs: vec![],
+            tz,
+            _tp: PhantomData,
+        }
     }
 }
 
-impl<Tz> Scheduler<Tz> where 
-    Tz: chrono::TimeZone + Sync + Send {
-    
-        
-
+impl<Tz, Tp> Scheduler<Tz, Tp>
+where
+    Tz: chrono::TimeZone + Sync + Send,
+    Tp: TimeProvider,
+{
     /// Add a new job to the scheduler to be run on the given interval
     /// ```rust
     /// # extern crate clokwerk;
@@ -52,8 +72,8 @@ impl<Tz> Scheduler<Tz> where
     /// scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
     /// scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
     /// ```
-    pub fn every(&mut self, ival: Interval) -> &mut Job<Tz> {
-        let job = Job::<Tz>::new(ival, self.tz.clone());
+    pub fn every(&mut self, ival: Interval) -> &mut Job<Tz, Tp> {
+        let job = Job::<Tz, Tp>::new(ival, self.tz.clone());
         self.jobs.push(job);
         let last_index = self.jobs.len() - 1;
         &mut self.jobs[last_index]
@@ -82,10 +102,11 @@ impl<Tz> Scheduler<Tz> where
     }
 }
 
-impl<Tz> Scheduler<Tz> where 
+impl<Tz> Scheduler<Tz>
+where
     Tz: chrono::TimeZone + Sync + Send + 'static,
-    <Tz as chrono::TimeZone>::Offset: Send {
-
+    <Tz as chrono::TimeZone>::Offset: Send,
+{
     /// Start a background thread to call [Scheduler::run_pending()] with the specified frequency.
     /// The resulting thread fill end cleanly if the returned [ScheduleHandle] is dropped.
     pub fn watch_thread(self, frequency: Duration) -> ScheduleHandle {
@@ -126,52 +147,139 @@ impl Drop for ScheduleHandle {
 
 #[cfg(test)]
 mod tests {
-    // use super::Scheduler;
+    use super::{Scheduler, TimeProvider};
+    use crate::intervals::*;
+    use std::sync::{atomic::AtomicU32, atomic::Ordering, Arc};
 
-    // use std::thread;
-    // use std::time::Duration;
-    // use *;
+    macro_rules! make_time_provider {
+        ($name:ident : $($time:literal),+) => {
+            #[derive(Debug)]
+            struct $name {}
+            static TIMES_TIME_REQUESTED: once_cell::sync::Lazy<AtomicU32> = once_cell::sync::Lazy::new(|| AtomicU32::new(0));
+            impl TimeProvider for $name {
+                fn now<Tz>(tz: &Tz) -> chrono::DateTime<Tz>
+                where
+                    Tz: chrono::TimeZone + Sync + Send,
+                    {
+                        let times = [$(chrono::DateTime::parse_from_rfc3339($time).unwrap()),+];
+                        let idx = TIMES_TIME_REQUESTED.fetch_add(1, Ordering::SeqCst) as usize;
+                        times[idx].with_timezone(&tz)
+                    }
+            }
+        };
+    }
 
-    // These tests don't actually pass or fail; some of them could be rewritten to, but others are a bit too finicky
+    #[test]
+    fn test_every_plus() {
+        make_time_provider!(FakeTimeProvider :
+            "2019-10-22T12:40:00Z",
+            "2019-10-22T12:40:10Z",
+            "2019-10-22T12:50:20Z",
+            "2019-10-22T12:50:20Z",
+            "2019-10-22T12:50:30Z"
+        );
+        let mut scheduler =
+            Scheduler::with_tz_and_provider::<chrono::Utc, FakeTimeProvider>(chrono::Utc);
+        let times_called = Arc::new(AtomicU32::new(0));
+        {
+            let times_called = times_called.clone();
+            scheduler
+                .every(10.minutes())
+                .plus(5.seconds())
+                .run(move || {
+                    times_called.fetch_add(1, Ordering::SeqCst);
+                });
+        }
+        assert_eq!(1, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(0, times_called.load(Ordering::SeqCst));
+        assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        // We ask for the time to see if we should run it, and again when computing the next time to run
+        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        assert_eq!(5, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+    }
 
-    // #[test]
-    // fn test_something() {
-    //     let mut scheduler = Scheduler::new();
-    //     scheduler
-    //         .every(10.minutes())
-    //         .plus(5.seconds())
-    //         .run(|| println!("I'm running!"));
-    //     scheduler
-    //         .every(3.days())
-    //         .at("15:23")
-    //         .run(|| println!("I'm running!"));
-    //     println!("{:?}", scheduler);
-    //     scheduler.run_pending();
-    //     println!("{:?}", scheduler);
+    #[test]
+    fn test_every_at() {
+        make_time_provider!(FakeTimeProvider:
+            "2019-10-22T12:40:00Z",
+            "2019-10-22T12:40:10Z",
+            "2019-10-25T12:50:20Z",
+            "2019-10-25T15:23:20Z",
+            "2019-10-25T15:23:30Z",
+            "2019-10-26T15:50:30Z"
+        );
+        let mut scheduler =
+            Scheduler::with_tz_and_provider::<chrono::Utc, FakeTimeProvider>(chrono::Utc);
+        let times_called = Arc::new(AtomicU32::new(0));
+        {
+            let times_called = times_called.clone();
+            scheduler.every(3.days()).at("15:23").run(move || {
+                times_called.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        assert_eq!(1, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(0, times_called.load(Ordering::SeqCst));
+        assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        // We ask for the time to see if we should run it, and again when computing the next time to run
+        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        assert_eq!(5, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+    }
 
-    //     assert!(false);
-    // }
-
-    // #[test]
-    // fn test_something_else() {
-    //     let mut scheduler = Scheduler::with_tz(chrono::Utc);
-    //     scheduler
-    //         .every(5.seconds())
-    //         .and_every(2.seconds())
-    //         .run(|| println!("Running!"));
-    //     let handle = scheduler.watch_thread(Duration::from_millis(100));
-    //     thread::sleep(Duration::from_secs(7));
-    //     handle.stop();
-    //     thread::sleep(Duration::from_secs(7));
-    // }
-
-    // #[test]
-    // fn test_specific_time() {
-    //     let mut scheduler = Scheduler::with_tz(chrono::Utc);
-    //     scheduler.every(crate::intervals::Interval::Wednesday).at("3:57 AM").run(|| println!("UTC scheduling works"));
-    //     let handle = scheduler.watch_thread(Duration::from_millis(100));
-    //     thread::sleep(Duration::from_secs(60));
-    //     handle.stop();
-    //     thread::sleep(Duration::from_secs(60));
-    // }
+    #[test]
+    fn test_every_and_every() {
+        make_time_provider!(FakeTimeProvider:
+            "2019-10-22T12:40:01Z",
+            "2019-10-22T12:40:01Z",
+            "2019-10-22T12:40:02Z",
+            "2019-10-22T12:40:02Z",
+            "2019-10-22T12:40:03Z",
+            "2019-10-22T12:40:04Z",
+            "2019-10-22T12:40:04Z",
+            "2019-10-22T12:40:05Z",
+            "2019-10-22T12:40:05Z",
+            "2019-10-22T12:40:06Z",
+            "2019-10-22T12:40:06Z"
+        );
+        let mut scheduler =
+            Scheduler::with_tz_and_provider::<chrono::Utc, FakeTimeProvider>(chrono::Utc);
+        let times_called = Arc::new(AtomicU32::new(0));
+        {
+            let times_called = times_called.clone();
+            scheduler
+                .every(5.seconds())
+                .and_every(2.seconds())
+                .run(move || {
+                    times_called.fetch_add(1, Ordering::SeqCst);
+                });
+        }
+        assert_eq!(1, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(0, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(5, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(7, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(2, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(9, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(3, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(11, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(4, times_called.load(Ordering::SeqCst));
+    }
 }

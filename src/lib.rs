@@ -47,6 +47,7 @@ extern crate chrono;
 mod intervals;
 mod job;
 mod scheduler;
+mod timeprovider;
 
 use intervals::RunConfig;
 pub use intervals::{Interval, TimeUnits};

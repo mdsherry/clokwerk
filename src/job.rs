@@ -1,20 +1,31 @@
+use crate::timeprovider::{ChronoTimeProvider, TimeProvider};
 use chrono::prelude::*;
 use intervals::NextTime;
 use std::fmt;
+use std::marker::PhantomData;
 use Interval;
 use RunConfig;
 
 /// A job to run on the scheduler.
 /// Create these by calling [`Scheduler::every()`](::Scheduler::every).
-pub struct Job<Tz = Local> where Tz: TimeZone {
+pub struct Job<Tz = Local, Tp = ChronoTimeProvider>
+where
+    Tz: TimeZone,
+    Tp: TimeProvider,
+{
     frequency: Vec<RunConfig>,
     next_run: Option<DateTime<Tz>>,
     last_run: Option<DateTime<Tz>>,
-    job: Option<Box<FnMut() + Sync + Send>>,
-    tz: Tz
+    job: Option<Box<dyn FnMut() + Sync + Send>>,
+    tz: Tz,
+    _tp: PhantomData<Tp>,
 }
 
-impl<Tz> fmt::Debug for Job<Tz> where Tz: TimeZone {
+impl<Tz, Tp> fmt::Debug for Job<Tz, Tp>
+where
+    Tz: TimeZone,
+    Tp: TimeProvider,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -24,14 +35,19 @@ impl<Tz> fmt::Debug for Job<Tz> where Tz: TimeZone {
     }
 }
 
-impl<Tz> Job<Tz> where Tz: chrono::TimeZone {
+impl<Tz, Tp> Job<Tz, Tp>
+where
+    Tz: chrono::TimeZone + Sync + Send,
+    Tp: TimeProvider,
+{
     pub(crate) fn new(ival: Interval, tz: Tz) -> Self {
         Job {
             frequency: vec![RunConfig::from_interval(ival)],
             next_run: None,
             last_run: None,
             job: None,
-            tz
+            tz,
+            _tp: PhantomData,
         }
     }
 
@@ -95,7 +111,7 @@ impl<Tz> Job<Tz> where Tz: chrono::TimeZone {
         match self.next_run {
             Some(_) => (),
             None => {
-                let now = Local::now().with_timezone(&self.tz);
+                let now = Tp::now(&self.tz);
                 self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
             }
         };
@@ -105,7 +121,7 @@ impl<Tz> Job<Tz> where Tz: chrono::TimeZone {
     /// Test whether a job is scheduled to run again. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn is_pending(&self) -> bool {
-        let now = Local::now().with_timezone(&self.tz);
+        let now = Tp::now(&self.tz);
         match &self.next_run {
             Some(dt) => *dt <= now,
             None => false,
@@ -115,7 +131,7 @@ impl<Tz> Job<Tz> where Tz: chrono::TimeZone {
     /// Run a task and re-schedule it. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
     pub fn execute(&mut self) {
-        let now = Local::now().with_timezone(&self.tz);
+        let now = Tp::now(&self.tz);
         if let Some(ref mut f) = self.job {
             f();
         }
