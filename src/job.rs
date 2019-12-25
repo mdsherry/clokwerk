@@ -16,7 +16,7 @@ where
     frequency: Vec<RunConfig>,
     next_run: Option<DateTime<Tz>>,
     last_run: Option<DateTime<Tz>>,
-    job: Option<Box<dyn FnMut() + Sync + Send>>,
+    job: Option<Box<dyn FnMut() + Send>>,
     tz: Tz,
     _tp: PhantomData<Tp>,
 }
@@ -105,7 +105,7 @@ where
     /// Specify a task to run, and schedule its next run
     pub fn run<F>(&mut self, f: F) -> &mut Self
     where
-        F: 'static + FnMut() + Sync + Send,
+        F: 'static + FnMut() + Send,
     {
         self.job = Some(Box::new(f));
         match self.next_run {
