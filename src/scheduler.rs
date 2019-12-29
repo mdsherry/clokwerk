@@ -36,7 +36,7 @@ impl Scheduler {
         Scheduler::default()
     }
 
-    /// Create a new scheduler. Dates and times will be interpretted using the specified
+    /// Create a new scheduler. Dates and times will be interpretted using the specified timezone.
     pub fn with_tz<Tz: chrono::TimeZone>(tz: Tz) -> Scheduler<Tz> {
         Scheduler {
             jobs: vec![],
@@ -45,6 +45,9 @@ impl Scheduler {
         }
     }
 
+    /// Create a new scheduler. Dates and times will be interpretted using the specified timezone.
+    /// In addition, you can provide an alternate time provider. This is mostly useful for writing
+    /// tests.
     pub fn with_tz_and_provider<Tz: chrono::TimeZone, Tp: TimeProvider>(
         tz: Tz,
     ) -> Scheduler<Tz, Tp> {

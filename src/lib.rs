@@ -23,6 +23,8 @@
 //! scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
 //! scheduler.every(Tuesday).at("14:20:17").and_every(Thursday).at("15:00").run(|| println!("Biweekly task"));
 //! scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
+//! scheduler.every(1.day()).at("3:20 pm").run(|| println!("I only run once")).once();
+//! scheduler.every(Weekday).at("12:00").count(10).run(|| println!("Countdown"));
 //!
 //! // Manually run the scheduler in an event loop
 //! for _ in 1..10 {
@@ -47,9 +49,9 @@ extern crate chrono;
 mod intervals;
 mod job;
 mod scheduler;
-mod timeprovider;
+pub mod timeprovider;
 
 use intervals::RunConfig;
-pub use intervals::{Interval, TimeUnits, NextTime};
+pub use intervals::{Interval, NextTime, TimeUnits};
 pub use job::Job;
 pub use scheduler::{ScheduleHandle, Scheduler};
