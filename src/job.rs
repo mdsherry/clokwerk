@@ -6,6 +6,13 @@ use std::marker::PhantomData;
 use Interval;
 use RunConfig;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunCount {
+    Never,
+    Times(usize),
+    Forever,
+}
+
 /// A job to run on the scheduler.
 /// Create these by calling [`Scheduler::every()`](::Scheduler::every).
 pub struct Job<Tz = Local, Tp = ChronoTimeProvider>
@@ -17,6 +24,7 @@ where
     next_run: Option<DateTime<Tz>>,
     last_run: Option<DateTime<Tz>>,
     job: Option<Box<dyn FnMut() + Send>>,
+    run_count: RunCount,
     tz: Tz,
     _tp: PhantomData<Tp>,
 }
@@ -46,6 +54,7 @@ where
             next_run: None,
             last_run: None,
             job: None,
+            run_count: RunCount::Forever,
             tz,
             _tp: PhantomData,
         }
@@ -102,6 +111,31 @@ where
         self
     }
 
+    /// Execute the job only once. Equivalent to `_.count(1)`.
+    pub fn once(&mut self) -> &mut Self {
+        self.run_count = RunCount::Times(1);
+        self
+    }
+
+    /// Execute the job forever. This is the default behaviour.
+    pub fn forever(&mut self) -> &mut Self {
+        self.run_count = RunCount::Forever;
+        self
+    }
+
+    /// Execute the job only `count` times.
+    pub fn count(&mut self, count: usize) -> &mut Self {
+        self.run_count = RunCount::Times(count);
+        self
+    }
+
+    fn next_run_time(&self, now: &DateTime<Tz>) -> Option<DateTime<Tz>> {
+        match self.run_count {
+            RunCount::Never => None,
+            _ => self.frequency.iter().map(|freq| freq.next(now)).min(),
+        }
+    }
+
     /// Specify a task to run, and schedule its next run
     pub fn run<F>(&mut self, f: F) -> &mut Self
     where
@@ -112,7 +146,7 @@ where
             Some(_) => (),
             None => {
                 let now = Tp::now(&self.tz);
-                self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
+                self.next_run = self.next_run_time(&now);
             }
         };
         self
@@ -120,22 +154,30 @@ where
 
     /// Test whether a job is scheduled to run again. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
-    pub fn is_pending(&self) -> bool {
-        let now = Tp::now(&self.tz);
+    pub fn is_pending(&self, now: &DateTime<Tz>) -> bool {
         match &self.next_run {
-            Some(dt) => *dt <= now,
+            Some(dt) => *dt <= *now,
             None => false,
         }
     }
 
     /// Run a task and re-schedule it. This is usually only called by
     /// [Scheduler::run_pending()](::Scheduler::run_pending).
-    pub fn execute(&mut self) {
-        let now = Tp::now(&self.tz);
+    pub fn execute(&mut self, now: &DateTime<Tz>) {
+        // Don't do anything if we're run out of runs
+        if self.run_count == RunCount::Never {
+            return;
+        }
         if let Some(ref mut f) = self.job {
             f();
         }
         self.last_run = Some(now.clone());
-        self.next_run = self.frequency.iter().map(|freq| freq.next(&now)).min();
+        self.next_run = self.next_run_time(now);
+        self.run_count = match self.run_count {
+            RunCount::Never => RunCount::Never,
+            RunCount::Times(n) if n > 1 => RunCount::Times(n - 1),
+            RunCount::Times(_) => RunCount::Never,
+            RunCount::Forever => RunCount::Forever,
+        }
     }
 }

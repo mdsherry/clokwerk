@@ -94,9 +94,10 @@ where
     /// }
     /// ```
     pub fn run_pending(&mut self) {
+        let now = Tp::now(&self.tz);
         for job in &mut self.jobs {
-            if job.is_pending() {
-                job.execute();
+            if job.is_pending(&now) {
+                job.execute(&now);
             }
         }
     }
@@ -173,8 +174,7 @@ mod tests {
     fn test_every_plus() {
         make_time_provider!(FakeTimeProvider :
             "2019-10-22T12:40:00Z",
-            "2019-10-22T12:40:10Z",
-            "2019-10-22T12:50:20Z",
+            "2019-10-22T12:40:00Z",
             "2019-10-22T12:50:20Z",
             "2019-10-22T12:50:30Z"
         );
@@ -196,11 +196,10 @@ mod tests {
         assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         scheduler.run_pending();
         assert_eq!(1, times_called.load(Ordering::SeqCst));
-        // We ask for the time to see if we should run it, and again when computing the next time to run
-        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(3, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         scheduler.run_pending();
         assert_eq!(1, times_called.load(Ordering::SeqCst));
-        assert_eq!(5, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
     }
 
     #[test]
@@ -209,7 +208,6 @@ mod tests {
             "2019-10-22T12:40:00Z",
             "2019-10-22T12:40:10Z",
             "2019-10-25T12:50:20Z",
-            "2019-10-25T15:23:20Z",
             "2019-10-25T15:23:30Z",
             "2019-10-26T15:50:30Z"
         );
@@ -228,11 +226,10 @@ mod tests {
         assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         scheduler.run_pending();
         assert_eq!(1, times_called.load(Ordering::SeqCst));
-        // We ask for the time to see if we should run it, and again when computing the next time to run
-        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(3, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         scheduler.run_pending();
         assert_eq!(1, times_called.load(Ordering::SeqCst));
-        assert_eq!(5, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
     }
 
     #[test]
@@ -241,13 +238,9 @@ mod tests {
             "2019-10-22T12:40:01Z",
             "2019-10-22T12:40:01Z",
             "2019-10-22T12:40:02Z",
-            "2019-10-22T12:40:02Z",
             "2019-10-22T12:40:03Z",
             "2019-10-22T12:40:04Z",
-            "2019-10-22T12:40:04Z",
             "2019-10-22T12:40:05Z",
-            "2019-10-22T12:40:05Z",
-            "2019-10-22T12:40:06Z",
             "2019-10-22T12:40:06Z"
         );
         let mut scheduler =
@@ -267,19 +260,48 @@ mod tests {
         assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         assert_eq!(0, times_called.load(Ordering::SeqCst));
         scheduler.run_pending();
+        assert_eq!(3, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
         assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         assert_eq!(1, times_called.load(Ordering::SeqCst));
         scheduler.run_pending();
         assert_eq!(5, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
-        assert_eq!(1, times_called.load(Ordering::SeqCst));
-        scheduler.run_pending();
-        assert_eq!(7, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         assert_eq!(2, times_called.load(Ordering::SeqCst));
         scheduler.run_pending();
-        assert_eq!(9, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(6, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         assert_eq!(3, times_called.load(Ordering::SeqCst));
         scheduler.run_pending();
-        assert_eq!(11, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(7, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
         assert_eq!(4, times_called.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_once() {
+        make_time_provider!(FakeTimeProvider:
+            "2019-10-22T12:40:01Z",
+            "2019-10-22T12:40:01Z",
+            "2019-10-22T12:40:02Z",
+            "2019-10-22T12:40:03Z"
+        );
+        let mut scheduler =
+            Scheduler::with_tz_and_provider::<chrono::Utc, FakeTimeProvider>(chrono::Utc);
+        let times_called = Arc::new(AtomicU32::new(0));
+        {
+            let times_called = times_called.clone();
+            scheduler.every(1.seconds()).once().run(move || {
+                times_called.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        assert_eq!(1, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(2, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(0, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(3, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
+        scheduler.run_pending();
+        assert_eq!(4, TIMES_TIME_REQUESTED.load(Ordering::SeqCst));
+        assert_eq!(1, times_called.load(Ordering::SeqCst));
     }
 }

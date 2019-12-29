@@ -554,5 +554,4 @@ mod tests {
         assert_eq!(0.weeks().next(&dt), dt, "next 0 weeks");
         assert_eq!(0.weeks().prev(&dt), dt, "prev 0 weeks");
     }
-
 }

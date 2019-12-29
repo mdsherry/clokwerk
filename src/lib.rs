@@ -50,6 +50,6 @@ mod scheduler;
 mod timeprovider;
 
 use intervals::RunConfig;
-pub use intervals::{Interval, TimeUnits};
+pub use intervals::{Interval, TimeUnits, NextTime};
 pub use job::Job;
 pub use scheduler::{ScheduleHandle, Scheduler};
