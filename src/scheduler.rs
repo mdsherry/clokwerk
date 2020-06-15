@@ -82,7 +82,11 @@ where
         &mut self.jobs[last_index]
     }
 
-    /// Run all jobs that should run at this time.
+    /// Run all jobs that should run at this time. 
+    /// 
+    /// This method blocks while jobs are being run. If a job takes a long time, it may prevent
+    /// other tasks from running as scheduled. If you have a long-running task, you might consider
+    /// having the job move the work into another thread so that it can return promptly.
     /// ```rust
     /// # extern crate clokwerk;
     /// # use clokwerk::*;
@@ -113,6 +117,7 @@ where
 {
     /// Start a background thread to call [Scheduler::run_pending()] with the specified frequency.
     /// The resulting thread fill end cleanly if the returned [ScheduleHandle] is dropped.
+    #[must_use = "The scheduler is halted when the returned handle is dropped"]
     pub fn watch_thread(self, frequency: Duration) -> ScheduleHandle {
         let stop = Arc::new(AtomicBool::new(false));
         let my_stop = stop.clone();
@@ -153,7 +158,7 @@ impl Drop for ScheduleHandle {
 mod tests {
     use super::{Scheduler, TimeProvider};
     use crate::intervals::*;
-    use std::sync::{atomic::AtomicU32, atomic::Ordering, Arc};
+    use std::{thread, sync::{atomic::AtomicU32, atomic::Ordering, Arc}};
 
     macro_rules! make_time_provider {
         ($name:ident : $($time:literal),+) => {
