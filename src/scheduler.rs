@@ -116,7 +116,7 @@ where
     <Tz as chrono::TimeZone>::Offset: Send,
 {
     /// Start a background thread to call [Scheduler::run_pending()] with the specified frequency.
-    /// The resulting thread fill end cleanly if the returned [ScheduleHandle] is dropped.
+    /// The resulting thread will end cleanly if the returned [ScheduleHandle] is dropped.
     #[must_use = "The scheduler is halted when the returned handle is dropped"]
     pub fn watch_thread(self, frequency: Duration) -> ScheduleHandle {
         let stop = Arc::new(AtomicBool::new(false));
