@@ -16,6 +16,7 @@ enum RunCount {
     Forever,
 }
 
+#[derive(Debug, Clone)]
 struct RepeatConfig {
     repeats: usize,
     repeat_interval: Interval,
@@ -34,7 +35,6 @@ where
     last_run: Option<DateTime<Tz>>,
     job: Option<Box<dyn FnMut() + Send>>,
     run_count: RunCount,
-    separate_thread: bool,
     repeat_config: Option<RepeatConfig>,
     tz: Tz,
     _tp: PhantomData<Tp>,
@@ -46,11 +46,13 @@ where
     Tp: TimeProvider,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Job {{ frequency: {:?}, next_run: {:?}, last_run: {:?}, job: ??? }}",
-            self.frequency, self.next_run, self.last_run
-        )
+        f.debug_struct("Job")
+            .field("frequency", &self.frequency)
+            .field("next_run", &self.next_run)
+            .field("last_run", &self.last_run)
+            .field("run_count", &self.run_count)
+            .field("repeat_config", &self.repeat_config)
+            .finish()
     }
 }
 
@@ -66,7 +68,6 @@ where
             last_run: None,
             job: None,
             run_count: RunCount::Forever,
-            separate_thread: false,
             repeat_config: None,
             tz,
             _tp: PhantomData,
@@ -180,7 +181,7 @@ where
         }
     }
 
-    /// After running once, run again with the specified interval. 
+    /// After running once, run again with the specified interval.
     ///
     /// ```rust
     /// # extern crate clokwerk;
@@ -246,10 +247,14 @@ where
             let now = Tp::now(&self.tz);
             self.next_run = self.next_run_time(&now);
             match &mut self.repeat_config {
-                Some(RepeatConfig{ repeats, repeats_left, ..}) => {
+                Some(RepeatConfig {
+                    repeats,
+                    repeats_left,
+                    ..
+                }) => {
                     *repeats_left = *repeats;
                 }
-                None => ()
+                None => (),
             }
         }
         self
@@ -278,25 +283,43 @@ where
         // We compute this up front since we can't borrow self immutably while doing this next bit
         let next_run_time = self.next_run_time(now);
         match &mut self.repeat_config {
-            Some(RepeatConfig{ repeats, repeats_left, repeat_interval}) => {
+            Some(RepeatConfig {
+                repeats,
+                repeats_left,
+                repeat_interval,
+            }) => {
                 if *repeats_left > 0 {
                     *repeats_left -= 1;
-                    self.next_run = Some(repeat_interval.next(now));
+                    // Normal scheduling is aligned with the day: if you ask for something every hour, it will
+                    // run at the start of the next hour, not one hour after being scheduled.
+                    // For repeats, though, we want them aligned the first run of the repeats.
+                    // This means we want to align with with next_run (which should be not far in the past),
+                    // or if it's somehow unavailable, the current time.
+                    // It's possible that we're really far behind. If so, find the next repeat interval that's
+                    // still in the future (relative to when we start this run.)
+                    let mut next = self.next_run.as_ref().unwrap_or(now).clone();
+                    loop {
+                        next = repeat_interval.next_from(&next);
+                        if next > *now {
+                            break;
+                        }
+                    }
+                    self.next_run = Some(next);
                 } else {
                     self.next_run = next_run_time;
                     *repeats_left = *repeats;
                 }
             }
-            None => self.next_run = next_run_time
+            None => self.next_run = next_run_time,
         }
-        
+
         self.last_run = Some(now.clone());
         self.run_count = match self.run_count {
             RunCount::Never => RunCount::Never,
             RunCount::Times(n) if n > 1 => RunCount::Times(n - 1),
             RunCount::Times(_) => RunCount::Never,
             RunCount::Forever => RunCount::Forever,
-        }
+        };
     }
 }
 
@@ -310,16 +333,60 @@ where
     Tz: chrono::TimeZone + Sync + Send,
     Tp: TimeProvider,
 {
-    /// Indicate the number of times the job should be run every time it's scheduled.
-    /// Passing a value of 1 here is the same as not specifying a repeat at all. A value of 0 is ignored.
+    /// Indicate the number of additoinal times the job should be run every time it's scheduled.
+    /// Passing a value of 0 here is the same as not specifying a repeat at all.
     pub fn times(self, n: usize) -> &'a mut Job<Tz, Tp> {
         if n >= 1 {
             self.job.repeat_config = Some(RepeatConfig {
-                repeats: n - 1,
+                repeats: n,
                 repeat_interval: self.interval,
-                repeats_left: 0
+                repeats_left: 0,
             });
         }
         self.job
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Job;
+    use crate::{intervals::*, timeprovider::TimeProvider};
+    use chrono::prelude::*;
+
+    #[test]
+    fn test_repeating() {
+        fn utc_hms(h: u32, m: u32, s: u32) -> DateTime<Utc> {
+            Utc.from_utc_datetime(&NaiveDate::from_ymd(2020, 6, 16).and_hms(h, m, s))
+        }
+        struct TestTimeProvider;
+        impl TimeProvider for TestTimeProvider {
+            fn now<Tz>(tz: &Tz) -> chrono::DateTime<Tz>
+            where
+                Tz: chrono::TimeZone + Sync + Send,
+            {
+                utc_hms(7, 58, 0).with_timezone(tz)
+            }
+        }
+        let mut job = Job::<Utc, TestTimeProvider>::new(1.hour(), Utc);
+        job.repeating_every(45.minutes()).times(2).run(|| ());
+
+        assert!(!job.is_pending(&utc_hms(7, 59, 0)));
+        assert!(job.is_pending(&utc_hms(8, 0, 0)));
+        job.execute(&utc_hms(8, 0, 0));
+        println!("{:?}", job.next_run);
+
+        assert!(!job.is_pending(&utc_hms(8, 44, 0)));
+        assert!(job.is_pending(&utc_hms(8, 45, 0)));
+        job.execute(&utc_hms(8, 45, 0));
+
+        // Skips 9:00 because it's still repeating at 45 minutes
+        assert!(!job.is_pending(&utc_hms(9, 0, 0)));
+
+        assert!(!job.is_pending(&utc_hms(9, 29, 0)));
+        assert!(job.is_pending(&utc_hms(9, 30, 0)));
+        job.execute(&utc_hms(9, 30, 0));
+
+        assert!(!job.is_pending(&utc_hms(9, 59, 0)));
+        assert!(job.is_pending(&utc_hms(10, 0, 0)));
     }
 }

@@ -46,7 +46,7 @@ pub(crate) fn parse_time(s: &str) -> Result<NaiveTime, chrono::ParseError> {
 
 /// A new-type for parsing various types into [`chrono::NaiveTime`] values.
 ///
-/// To use your own type with [`Job::at`], impl TryFrom/TryInto for your type. 
+/// To use your own type with [`Job::at`], impl TryFrom/TryInto for your type.
 /// Notable types that have implementations are &str and NaiveTime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ClokwerkTime(pub NaiveTime);
@@ -63,7 +63,6 @@ impl TryFrom<&str> for ClokwerkTime {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(ClokwerkTime(parse_time(value)?))
     }
-    
 }
 
 #[derive(Debug)]
@@ -105,7 +104,7 @@ impl RunConfig {
             ..*self
         }
     }
-    
+
     fn apply_adjustment<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match self.adjustment {
             None => from.clone(),
@@ -159,8 +158,8 @@ fn day_of_week(i: Interval) -> usize {
     }
 }
 
+use std::convert::{TryFrom, TryInto};
 use Interval::*;
-use std::convert::{TryInto, TryFrom};
 impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
@@ -218,6 +217,7 @@ impl NextTime for Interval {
             }
         }
     }
+
     fn prev<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
             Seconds(x) | Minutes(x) | Hours(x) | Days(x) | Weeks(x) if x == 0 => {
@@ -297,6 +297,36 @@ impl NextTime for Interval {
                     }
                 };
                 (from.date() - Duration::days(days)).and_hms(0, 0, 0)
+            }
+        }
+    }
+}
+
+impl Interval {
+    pub(crate) fn next_from<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
+        match *self {
+            Seconds(x) | Minutes(x) | Hours(x) | Days(x) | Weeks(x) if x == 0 => {
+                return from.clone()
+            }
+            _ => (),
+        }
+
+        match *self {
+            Seconds(s) => from.clone() + Duration::seconds(s as i64),
+            Minutes(m) => from.clone() + Duration::seconds(m as i64 * 60),
+            Hours(h) => from.clone() + Duration::seconds(h as i64 * 3600),
+            Days(d) => from.clone() + Duration::days(d as i64),
+            Weeks(w) => from.clone() + Duration::days(w as i64 * 7),
+            Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday => self.next(from),
+            Weekday => {
+                let d = from.date();
+                let dow = d.weekday();
+                let days = match dow {
+                    Weekday::Fri => 3,
+                    Weekday::Sat => 2,
+                    _ => 1,
+                };
+                from.clone() + Duration::days(days)
             }
         }
     }
@@ -525,10 +555,7 @@ mod tests {
     use std::convert::TryInto;
     #[test]
     fn test_parse_time() {
-        assert_eq!(
-            parse_time("14:52:13"),
-            Ok(NaiveTime::from_hms(14, 52, 13))
-        );
+        assert_eq!(parse_time("14:52:13"), Ok(NaiveTime::from_hms(14, 52, 13)));
         assert_eq!(
             parse_time("2:52:13 pm"),
             Ok(NaiveTime::from_hms(14, 52, 13))

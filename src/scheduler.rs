@@ -82,8 +82,8 @@ where
         &mut self.jobs[last_index]
     }
 
-    /// Run all jobs that should run at this time. 
-    /// 
+    /// Run all jobs that should run at this time.
+    ///
     /// This method blocks while jobs are being run. If a job takes a long time, it may prevent
     /// other tasks from running as scheduled. If you have a long-running task, you might consider
     /// having the job move the work into another thread so that it can return promptly.
@@ -158,7 +158,10 @@ impl Drop for ScheduleHandle {
 mod tests {
     use super::{Scheduler, TimeProvider};
     use crate::intervals::*;
-    use std::{thread, sync::{atomic::AtomicU32, atomic::Ordering, Arc}};
+    use std::{
+        sync::{atomic::AtomicU32, atomic::Ordering, Arc},
+        thread,
+    };
 
     macro_rules! make_time_provider {
         ($name:ident : $($time:literal),+) => {
