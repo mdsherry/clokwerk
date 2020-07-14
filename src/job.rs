@@ -5,7 +5,7 @@ use crate::{
 use chrono::prelude::*;
 use intervals::NextTime;
 use std::fmt::{self, Debug};
-use std::{convert::TryInto, marker::PhantomData, thread};
+use std::{convert::TryInto, marker::PhantomData};
 use Interval;
 use RunConfig;
 

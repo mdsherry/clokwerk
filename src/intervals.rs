@@ -158,7 +158,7 @@ fn day_of_week(i: Interval) -> usize {
     }
 }
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use Interval::*;
 impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
@@ -234,13 +234,13 @@ impl NextTime for Interval {
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s.checked_rem(m * 60).unwrap_or(0);
-                let modulus = if modulus == 0 { (m * 60) } else { modulus };
+                let modulus = if modulus == 0 { m * 60 } else { modulus };
                 from.clone() - Duration::seconds(i64::from(modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s.checked_rem(h * 3600).unwrap_or(0);
-                let modulus = if modulus == 0 { (h * 3600) } else { modulus };
+                let modulus = if modulus == 0 { h * 3600 } else { modulus };
                 from.clone() - Duration::seconds(i64::from(modulus))
             }
             Days(d) => {
