@@ -25,6 +25,8 @@
 //! scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
 //! scheduler.every(1.day()).at("3:20 pm").run(|| println!("I only run once")).once();
 //! scheduler.every(Weekday).at("12:00").count(10).run(|| println!("Countdown"));
+//! scheduler.every(1.day()).at("10:00 am").repeating_every(30.minutes()).times(6).run(|| println!("I run every half hour from 10 AM to 1 PM inclusive."));
+//! scheduler.every(1.day()).at(chrono::NaiveTime::from_hms(13, 12, 14)).run(|| println!("You can also pass chrono::NaiveTimes to `at`, instead of strings."));
 //!
 //! // Manually run the scheduler in an event loop
 //! for _ in 1..10 {
