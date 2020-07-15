@@ -1,11 +1,10 @@
 use crate::{
-    intervals::ClokwerkTime,
-    timeprovider::{ChronoTimeProvider, TimeProvider},
+    timeprovider::{ChronoTimeProvider, TimeProvider}, intervals::parse_time,
 };
 use chrono::prelude::*;
 use intervals::NextTime;
 use std::fmt::{self, Debug};
-use std::{convert::TryInto, marker::PhantomData};
+use std::marker::PhantomData;
 use Interval;
 use RunConfig;
 
@@ -89,7 +88,6 @@ where
     /// let mut scheduler = Scheduler::new();
     /// scheduler.every(1.day()).at("14:32").run(|| println!("Tea time!"));
     /// scheduler.every(Wednesday).at("6:32:21 PM").run(|| println!("Writing examples is hard"));
-    /// scheduler.every(Weekday).at(NaiveTime::from_hms(23, 42, 16)).run(|| println!("Also works with NaiveTime"));
     /// ```
     /// Times can be specified using strings, with or without seconds, and in either 24-hour or 12-hour time.
     /// They can also be any other type that implements `TryInto<ClokwerkTime>`, which includes [`chrono::NaiveTime`].
@@ -97,10 +95,7 @@ where
     /// If the value comes from an untrusted source, e.g. user input, [`Job::try_at`] will return a result instead.
     ///
     /// This method is mutually exclusive with [`Job::plus()`].
-    pub fn at<T>(&mut self, time: T) -> &mut Self
-    where
-        T: TryInto<ClokwerkTime>,
-        T::Error: Debug,
+    pub fn at(&mut self, time: &str) -> &mut Self
     {
         self.try_at(time)
             .expect("Could not convert value into a time")
@@ -118,17 +113,30 @@ where
     /// ```
     /// Times can be specified with or without seconds, and in either 24-hour or 12-hour time.
     /// Mutually exclusive with [`Job::plus()`].
-    pub fn try_at<T>(&mut self, time: T) -> Result<&mut Self, T::Error>
-    where
-        T: TryInto<ClokwerkTime>,
+    pub fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError>
     {
-        {
-            let frequency = self.last_frequency();
-            *frequency = frequency.with_time(time.try_into()?);
-        }
-        Ok(self)
+        Ok(self.at_time(parse_time(time)?))
     }
 
+    /// Similar to [`Job::at`], but it takes a chrono::NaiveTime instead of a `&str`.
+    /// Because it doesn't need to parse a string, this method will always succeed.
+    /// ```rust
+    /// # extern crate clokwerk;
+    /// # extern crate chrono;
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// # use chrono::NaiveTime;
+    /// let mut scheduler = Scheduler::new();
+    /// scheduler.every(Weekday).at_time(NaiveTime::from_hms(23, 42, 16)).run(|| println!("Also works with NaiveTime"));
+    /// ```
+
+    pub fn at_time(&mut self, time: NaiveTime) -> &mut Self {
+        {
+            let frequency = self.last_frequency();
+            *frequency = frequency.with_time(time);
+        }
+        self
+    }
     /// Add additional precision time to when a task should run, e.g.
     /// ```rust
     /// # extern crate clokwerk;
@@ -388,5 +396,16 @@ mod test {
 
         assert!(!job.is_pending(&utc_hms(9, 59, 0)));
         assert!(job.is_pending(&utc_hms(10, 0, 0)));
+    }
+
+    #[test]
+    fn test_time_coercion() {
+        let mut job = Job::<Utc>::new(1.day(), Utc);
+        // &str
+        job.try_at("12:32").unwrap();
+        // &String
+        job.try_at(&format!("{}:{}", 12, 32)).unwrap();
+        // NaiveTime
+        job.at_time(NaiveTime::from_hms(12, 32, 0));
     }
 }

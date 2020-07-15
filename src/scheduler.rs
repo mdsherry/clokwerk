@@ -160,7 +160,6 @@ mod tests {
     use crate::intervals::*;
     use std::{
         sync::{atomic::AtomicU32, atomic::Ordering, Arc},
-        thread,
     };
 
     macro_rules! make_time_provider {
