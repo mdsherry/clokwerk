@@ -44,27 +44,6 @@ pub(crate) fn parse_time(s: &str) -> Result<NaiveTime, chrono::ParseError> {
         .or_else(|_| NaiveTime::parse_from_str(s, "%I:%M %p"))
 }
 
-/// A new-type for parsing various types into [`chrono::NaiveTime`] values.
-///
-/// To use your own type with [`Job::at`], impl TryFrom/TryInto for your type.
-/// Notable types that have implementations are &str and NaiveTime.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct ClokwerkTime(pub NaiveTime);
-
-impl TryFrom<NaiveTime> for ClokwerkTime {
-    type Error = std::convert::Infallible;
-    fn try_from(value: NaiveTime) -> Result<Self, Self::Error> {
-        Ok(ClokwerkTime(value))
-    }
-}
-
-impl TryFrom<&str> for ClokwerkTime {
-    type Error = chrono::ParseError;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Ok(ClokwerkTime(parse_time(value)?))
-    }
-}
-
 #[derive(Debug)]
 enum Adjustment {
     Intervals(Vec<Interval>),
@@ -85,9 +64,9 @@ impl RunConfig {
         }
     }
 
-    pub fn with_time(&self, t: ClokwerkTime) -> Self {
+    pub fn with_time(&self, t: NaiveTime) -> Self {
         RunConfig {
-            adjustment: Some(Adjustment::Time(t.0)),
+            adjustment: Some(Adjustment::Time(t)),
             ..*self
         }
     }
@@ -158,7 +137,6 @@ fn day_of_week(i: Interval) -> usize {
     }
 }
 
-use std::convert::TryFrom;
 use Interval::*;
 impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
@@ -552,7 +530,6 @@ mod tests {
     }
 
     use super::parse_time;
-    use std::convert::TryInto;
     #[test]
     fn test_parse_time() {
         assert_eq!(parse_time("14:52:13"), Ok(NaiveTime::from_hms(14, 52, 13)));
@@ -566,19 +543,19 @@ mod tests {
 
     #[test]
     fn test_run_config() {
-        let rc = RunConfig::from_interval(1.day()).with_time("15:00".try_into().unwrap());
+        let rc = RunConfig::from_interval(1.day()).with_time(NaiveTime::from_hms(15, 0, 0));
         let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
         let next_dt = rc.next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T15:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
-        let rc = RunConfig::from_interval(Tuesday).with_time("15:00".try_into().unwrap());
+        let rc = RunConfig::from_interval(Tuesday).with_time(NaiveTime::from_hms(15, 0, 0));
         let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
         let next_dt = rc.next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T15:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
 
-        let rc = RunConfig::from_interval(Tuesday).with_time("14:00".try_into().unwrap());
+        let rc = RunConfig::from_interval(Tuesday).with_time(NaiveTime::from_hms(14, 0, 0));
         let next_dt = rc.next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-11T14:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
