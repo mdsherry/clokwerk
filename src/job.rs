@@ -81,8 +81,6 @@ where
 
     /// Specify the time of day when a task should run, e.g.
     /// ```rust
-    /// # extern crate clokwerk;
-    /// # extern crate chrono;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # use chrono::NaiveTime;
@@ -103,8 +101,6 @@ where
 
     /// Identical to [`Job::at`] except that it returns a Result instead of panicking if the conversion failed.
     /// ```rust
-    /// # extern crate clokwerk;
-    /// # extern crate chrono;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
@@ -120,8 +116,6 @@ where
     /// Similar to [`Job::at`], but it takes a chrono::NaiveTime instead of a `&str`.
     /// Because it doesn't need to parse a string, this method will always succeed.
     /// ```rust
-    /// # extern crate clokwerk;
-    /// # extern crate chrono;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # use chrono::NaiveTime;
@@ -138,7 +132,6 @@ where
     }
     /// Add additional precision time to when a task should run, e.g.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
@@ -191,7 +184,6 @@ where
     /// After running once, run again with the specified interval.
     ///
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # fn hit_snooze() {}
@@ -207,7 +199,6 @@ where
     /// Unlike [`Job::at`] and [`Job::plus`],
     /// this affects all intervals associated with the job, not just the most recent one.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # fn hit_snooze() {}
@@ -226,7 +217,6 @@ where
     ///
     /// If a job is still repeating, it will ignore otherwise scheduled runs.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # fn hit_snooze() {}

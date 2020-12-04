@@ -66,7 +66,6 @@ where
 {
     /// Add a new job to the scheduler to be run on the given interval
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
@@ -88,7 +87,6 @@ where
     /// other tasks from running as scheduled. If you have a long-running task, you might consider
     /// having the job move the work into another thread so that it can return promptly.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// use std::thread;

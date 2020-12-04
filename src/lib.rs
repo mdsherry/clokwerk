@@ -46,8 +46,6 @@
 //!
 //! ## Similar libraries
 //! * [schedule-rs](https://github.com/mehcode/schedule-rs) and [job_scheduler](https://github.com/lholden/job_scheduler) are two other Rust scheduler libraries. Both use `cron` syntax for scheduling.
-extern crate chrono;
-
 mod intervals;
 mod job;
 mod scheduler;
