@@ -2,11 +2,11 @@ use crate::{
     timeprovider::{ChronoTimeProvider, TimeProvider}, intervals::parse_time,
 };
 use chrono::prelude::*;
-use intervals::NextTime;
+use crate::intervals::NextTime;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
-use Interval;
-use RunConfig;
+use crate::Interval;
+use crate::RunConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunCount {

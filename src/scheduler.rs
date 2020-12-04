@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use Interval;
-use Job;
+use crate::Interval;
+use crate::Job;
 /// Job scheduler
 #[derive(Debug)]
 pub struct Scheduler<Tz = chrono::Local, Tp = ChronoTimeProvider>

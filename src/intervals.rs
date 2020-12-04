@@ -137,7 +137,7 @@ fn day_of_week(i: Interval) -> usize {
     }
 }
 
-use Interval::*;
+use crate::Interval::*;
 impl NextTime for Interval {
     fn next<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match *self {
@@ -365,10 +365,10 @@ impl TimeUnits for u32 {
 #[cfg(test)]
 mod tests {
     use chrono::prelude::*;
-    use intervals::NextTime;
-    use Interval::*;
-    use RunConfig;
-    use TimeUnits;
+    use crate::intervals::NextTime;
+    use crate::Interval::*;
+    use crate::RunConfig;
+    use crate::TimeUnits;
 
     #[test]
     fn basic_units() {
