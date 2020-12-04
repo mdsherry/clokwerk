@@ -1,12 +1,13 @@
-use crate::{
-    timeprovider::{ChronoTimeProvider, TimeProvider}, intervals::parse_time,
-};
-use chrono::prelude::*;
 use crate::intervals::NextTime;
-use std::fmt::{self, Debug};
-use std::marker::PhantomData;
 use crate::Interval;
 use crate::RunConfig;
+use crate::{
+    intervals::parse_time,
+    timeprovider::{ChronoTimeProvider, TimeProvider},
+};
+use chrono::prelude::*;
+use std::fmt::{self, Debug};
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunCount {
@@ -95,8 +96,7 @@ where
     /// If the value comes from an untrusted source, e.g. user input, [`Job::try_at`] will return a result instead.
     ///
     /// This method is mutually exclusive with [`Job::plus()`].
-    pub fn at(&mut self, time: &str) -> &mut Self
-    {
+    pub fn at(&mut self, time: &str) -> &mut Self {
         self.try_at(time)
             .expect("Could not convert value into a time")
     }
@@ -113,8 +113,7 @@ where
     /// ```
     /// Times can be specified with or without seconds, and in either 24-hour or 12-hour time.
     /// Mutually exclusive with [`Job::plus()`].
-    pub fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError>
-    {
+    pub fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError> {
         Ok(self.at_time(parse_time(time)?))
     }
 

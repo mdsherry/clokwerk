@@ -1,4 +1,6 @@
 use crate::timeprovider::{ChronoTimeProvider, TimeProvider};
+use crate::Interval;
+use crate::Job;
 use std::default::Default;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
@@ -6,8 +8,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use crate::Interval;
-use crate::Job;
 /// Job scheduler
 #[derive(Debug)]
 pub struct Scheduler<Tz = chrono::Local, Tp = ChronoTimeProvider>
@@ -158,9 +158,7 @@ impl Drop for ScheduleHandle {
 mod tests {
     use super::{Scheduler, TimeProvider};
     use crate::intervals::*;
-    use std::{
-        sync::{atomic::AtomicU32, atomic::Ordering, Arc},
-    };
+    use std::sync::{atomic::AtomicU32, atomic::Ordering, Arc};
 
     macro_rules! make_time_provider {
         ($name:ident : $($time:literal),+) => {

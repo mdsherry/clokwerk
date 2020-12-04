@@ -364,11 +364,11 @@ impl TimeUnits for u32 {
 
 #[cfg(test)]
 mod tests {
-    use chrono::prelude::*;
     use crate::intervals::NextTime;
     use crate::Interval::*;
     use crate::RunConfig;
     use crate::TimeUnits;
+    use chrono::prelude::*;
 
     #[test]
     fn basic_units() {
