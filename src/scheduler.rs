@@ -1,4 +1,6 @@
 use crate::timeprovider::{ChronoTimeProvider, TimeProvider};
+use crate::Interval;
+use crate::Job;
 use std::default::Default;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
@@ -6,8 +8,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use Interval;
-use Job;
 /// Job scheduler
 #[derive(Debug)]
 pub struct Scheduler<Tz = chrono::Local, Tp = ChronoTimeProvider>
@@ -66,7 +66,6 @@ where
 {
     /// Add a new job to the scheduler to be run on the given interval
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
@@ -88,7 +87,6 @@ where
     /// other tasks from running as scheduled. If you have a long-running task, you might consider
     /// having the job move the work into another thread so that it can return promptly.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// use std::thread;
@@ -168,9 +166,7 @@ impl Drop for ScheduleHandle {
 mod tests {
     use super::{Scheduler, TimeProvider};
     use crate::intervals::*;
-    use std::{
-        sync::{atomic::AtomicU32, atomic::Ordering, Arc},
-    };
+    use std::sync::{atomic::AtomicU32, atomic::Ordering, Arc};
 
     macro_rules! make_time_provider {
         ($name:ident : $($time:literal),+) => {

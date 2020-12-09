@@ -9,6 +9,7 @@ repository = "https://github.com/mdsherry/clokwerk"
 keywords = ["scheduler", "job"]
 categories = ["date-and-time"]
 license = "Apache-2.0"
+edition = "2018"
 
 [dependencies]
 chrono = "0.4"

@@ -1,12 +1,13 @@
+use crate::intervals::NextTime;
+use crate::Interval;
+use crate::RunConfig;
 use crate::{
-    timeprovider::{ChronoTimeProvider, TimeProvider}, intervals::parse_time,
+    intervals::parse_time,
+    timeprovider::{ChronoTimeProvider, TimeProvider},
 };
 use chrono::prelude::*;
-use intervals::NextTime;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
-use Interval;
-use RunConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunCount {
@@ -80,8 +81,6 @@ where
 
     /// Specify the time of day when a task should run, e.g.
     /// ```rust
-    /// # extern crate clokwerk;
-    /// # extern crate chrono;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # use chrono::NaiveTime;
@@ -95,16 +94,13 @@ where
     /// If the value comes from an untrusted source, e.g. user input, [`Job::try_at`] will return a result instead.
     ///
     /// This method is mutually exclusive with [`Job::plus()`].
-    pub fn at(&mut self, time: &str) -> &mut Self
-    {
+    pub fn at(&mut self, time: &str) -> &mut Self {
         self.try_at(time)
             .expect("Could not convert value into a time")
     }
 
     /// Identical to [`Job::at`] except that it returns a Result instead of panicking if the conversion failed.
     /// ```rust
-    /// # extern crate clokwerk;
-    /// # extern crate chrono;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
@@ -113,16 +109,13 @@ where
     /// ```
     /// Times can be specified with or without seconds, and in either 24-hour or 12-hour time.
     /// Mutually exclusive with [`Job::plus()`].
-    pub fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError>
-    {
+    pub fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError> {
         Ok(self.at_time(parse_time(time)?))
     }
 
     /// Similar to [`Job::at`], but it takes a chrono::NaiveTime instead of a `&str`.
     /// Because it doesn't need to parse a string, this method will always succeed.
     /// ```rust
-    /// # extern crate clokwerk;
-    /// # extern crate chrono;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # use chrono::NaiveTime;
@@ -139,7 +132,6 @@ where
     }
     /// Add additional precision time to when a task should run, e.g.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// let mut scheduler = Scheduler::new();
@@ -192,7 +184,6 @@ where
     /// After running once, run again with the specified interval.
     ///
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # fn hit_snooze() {}
@@ -208,7 +199,6 @@ where
     /// Unlike [`Job::at`] and [`Job::plus`],
     /// this affects all intervals associated with the job, not just the most recent one.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # fn hit_snooze() {}
@@ -227,7 +217,6 @@ where
     ///
     /// If a job is still repeating, it will ignore otherwise scheduled runs.
     /// ```rust
-    /// # extern crate clokwerk;
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
     /// # fn hit_snooze() {}
