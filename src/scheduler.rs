@@ -115,8 +115,18 @@ where
     Tz: chrono::TimeZone + Sync + Send + 'static,
     <Tz as chrono::TimeZone>::Offset: Send,
 {
-    /// Start a background thread to call [Scheduler::run_pending()] with the specified frequency.
-    /// The resulting thread will end cleanly if the returned [ScheduleHandle] is dropped.
+    /// Start a background thread to call [Scheduler::run_pending()] repeatedly.
+    /// The frequency argument controls how long the thread will sleep between calls
+    /// to [Scheduler::run_pending()].
+    /// If the returned [ScheduleHandle] is dropped, the resulting thread will end 
+    /// cleanly when [Scheduler::run_pending()] would have next been called.
+    ///
+    /// Passing large durations for `frequency` can cause long delays when [ScheduleHandle::stop()]
+    /// is called, or the [ScheduleHandle] is dropped, as it waits for the thread to finish sleeping.
+    /// This could affect how long it takes for the program to exit.
+    ///
+    /// Reasonable values for `frequency` would be between 100 ms and 10 seconds.
+    /// If in doubt, choose a smaller value.
     #[must_use = "The scheduler is halted when the returned handle is dropped"]
     pub fn watch_thread(self, frequency: Duration) -> ScheduleHandle {
         let stop = Arc::new(AtomicBool::new(false));
