@@ -1,3 +1,17 @@
+## 0.3.4
+* Times returned by `Interval::next` and `Interval::prev` now have nanoseconds set to 0; previously, the nanoseconds of the current time would be used.
+* Improve documentation on `Scheduler::watch_thread`.
+
+## 0.3.3
+* Adding the trait in 0.3.1 was accidentally a breaking change, and hurt usability, so that change was reverted.
+
+## 0.3.2
+* Fix documentation link
+
+## 0.3.1
+* Support repeating jobs in quicker succession than normally scheduled
+* New trait to allow more flexibility in specifying times using Job::at
+
 ## 0.3.0
 * Remove `Sync` requirement for jobs
 * Add `TimeProvider` type parameter to allow custom times when testing
