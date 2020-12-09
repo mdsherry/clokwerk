@@ -150,17 +150,17 @@ impl NextTime for Interval {
             Seconds(s) => {
                 let modulus = from.timestamp().checked_rem(i64::from(s)).unwrap_or(0);
                 let next = s - (modulus as u32);
-                from.clone() + Duration::seconds(i64::from(next))
+                from.with_nanosecond(0).unwrap() + Duration::seconds(i64::from(next))
             }
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s.checked_rem(m * 60).unwrap_or(0);
-                from.clone() + Duration::seconds(i64::from(m * 60 - modulus))
+                from.with_nanosecond(0).unwrap() + Duration::seconds(i64::from(m * 60 - modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s.checked_rem(h * 3600).unwrap_or(0);
-                from.clone() + Duration::seconds(i64::from(h * 3600 - modulus))
+                from.with_nanosecond(0).unwrap() + Duration::seconds(i64::from(h * 3600 - modulus))
             }
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
@@ -207,19 +207,19 @@ impl NextTime for Interval {
             Seconds(s) => {
                 let modulus = from.timestamp().checked_rem(i64::from(s)).unwrap_or(0);
                 let modulus = if modulus == 0 { i64::from(s) } else { modulus };
-                from.clone() - Duration::seconds(modulus as i64)
+                from.with_nanosecond(0).unwrap() - Duration::seconds(modulus as i64)
             }
             Minutes(m) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s.checked_rem(m * 60).unwrap_or(0);
                 let modulus = if modulus == 0 { m * 60 } else { modulus };
-                from.clone() - Duration::seconds(i64::from(modulus))
+                from.with_nanosecond(0).unwrap() - Duration::seconds(i64::from(modulus))
             }
             Hours(h) => {
                 let s = from.num_seconds_from_midnight();
                 let modulus = s.checked_rem(h * 3600).unwrap_or(0);
                 let modulus = if modulus == 0 { h * 3600 } else { modulus };
-                from.clone() - Duration::seconds(i64::from(modulus))
+                from.with_nanosecond(0).unwrap() - Duration::seconds(i64::from(modulus))
             }
             Days(d) => {
                 let day_of_era = from.num_days_from_ce() as u32;
@@ -387,7 +387,8 @@ mod tests {
 
     #[test]
     fn test_next_start() {
-        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+        // Set 999 ms to check that we remove any sub-second values
+        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13.999-00:00").unwrap();
 
         let next_dt = 5.seconds().next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:15-00:00").unwrap();
@@ -449,7 +450,7 @@ mod tests {
 
     #[test]
     fn test_prev() {
-        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13.999-00:00").unwrap();
 
         let prev_dt = 5.seconds().prev(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-04T14:22:10-00:00").unwrap();
