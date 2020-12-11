@@ -116,7 +116,7 @@ where
     /// Start a background thread to call [Scheduler::run_pending()] repeatedly.
     /// The frequency argument controls how long the thread will sleep between calls
     /// to [Scheduler::run_pending()].
-    /// If the returned [ScheduleHandle] is dropped, the resulting thread will end 
+    /// If the returned [ScheduleHandle] is dropped, the resulting thread will end
     /// cleanly when [Scheduler::run_pending()] would have next been called.
     ///
     /// Passing large durations for `frequency` can cause long delays when [ScheduleHandle::stop()]
