@@ -1,5 +1,8 @@
 # Clokwerk, a simple scheduler
 
+[![Crate](https://img.shields.io/crates/v/clokwerk)](https://crates.io/crates/clokwerk)
+[![API](https://docs.rs/clokwerk/badge.svg)](https://docs.rs/clokwerk)
+
 Clokwerk is a simple scheduler, inspired by Python's [Schedule](https://schedule.readthedocs.io/en/stable/)
 and Ruby's [clockwork](https://github.com/Rykian/clockwork). It uses a similar DSL for scheduling, rather than
 parsing cron strings.
