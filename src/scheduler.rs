@@ -1,6 +1,9 @@
-use crate::{Job, timeprovider::{ChronoTimeProvider, TimeProvider}};
 use crate::Interval;
 use crate::SyncJob;
+use crate::{
+    timeprovider::{ChronoTimeProvider, TimeProvider},
+    Job,
+};
 use std::default::Default;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
@@ -231,7 +234,7 @@ impl Drop for ScheduleHandle {
 
 #[cfg(test)]
 mod tests {
-    use super::{Scheduler, TimeProvider, Job};
+    use super::{Job, Scheduler, TimeProvider};
     use crate::intervals::*;
     use std::sync::{atomic::AtomicU32, atomic::Ordering, Arc};
 

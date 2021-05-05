@@ -1,12 +1,12 @@
-use crate::{job::Job, job_schedule::{JobSchedule, WithSchedule}};
 use crate::Interval;
-
 use crate::{
-    timeprovider::{ChronoTimeProvider, TimeProvider},
+    job::Job,
+    job_schedule::{JobSchedule, WithSchedule},
 };
+
+use crate::timeprovider::{ChronoTimeProvider, TimeProvider};
 use chrono::prelude::*;
 use std::fmt;
-
 
 /// A job to run on the scheduler.
 /// Create these by calling [`Scheduler::every()`](crate::Scheduler::every).
@@ -21,7 +21,11 @@ where
     job: Option<Box<dyn FnMut() + Send>>,
 }
 
-impl<Tz, Tp> WithSchedule<Tz, Tp> for SyncJob<Tz, Tp> where  Tz: TimeZone, Tp: TimeProvider {
+impl<Tz, Tp> WithSchedule<Tz, Tp> for SyncJob<Tz, Tp>
+where
+    Tz: TimeZone,
+    Tp: TimeProvider,
+{
     fn schedule_mut(&mut self) -> &mut JobSchedule<Tz, Tp> {
         &mut self.schedule
     }
@@ -41,7 +45,12 @@ where
     }
 }
 
-impl<Tz, Tp> Job<Tz, Tp> for SyncJob<Tz, Tp> where Tz: TimeZone + Sync + Send, Tp: TimeProvider {}
+impl<Tz, Tp> Job<Tz, Tp> for SyncJob<Tz, Tp>
+where
+    Tz: TimeZone + Sync + Send,
+    Tp: TimeProvider,
+{
+}
 
 impl<Tz, Tp> SyncJob<Tz, Tp>
 where
@@ -51,14 +60,15 @@ where
     pub(crate) fn new(ival: Interval, tz: Tz) -> Self {
         SyncJob {
             schedule: JobSchedule::new(ival, tz),
-            job: None
+            job: None,
         }
     }
 
     /// Specify a task to run, and schedule its next run
     pub fn run<F>(&mut self, f: F) -> &mut Self
     where
-        F: 'static + FnMut() + Send {
+        F: 'static + FnMut() + Send,
+    {
         self.job = Some(Box::new(f));
         self.schedule.start_schedule();
         self

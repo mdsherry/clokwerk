@@ -1,8 +1,12 @@
 use std::{future::Future, marker::PhantomData, pin::Pin, task::Poll};
 
-use crate::{async_job::JobFuture, timeprovider::{ChronoTimeProvider, TimeProvider}, Job};
-use crate::Interval;
 use crate::AsyncJob;
+use crate::Interval;
+use crate::{
+    async_job::JobFuture,
+    timeprovider::{ChronoTimeProvider, TimeProvider},
+    Job,
+};
 
 /// An asynchronous job scheduler, for use with `Future`s.
 ///
@@ -36,7 +40,7 @@ use crate::AsyncJob;
 /// });
 /// ```
 /// ### Usage examples
-/// The examples below are intended to demonstrate how to work with various types of Future. 
+/// The examples below are intended to demonstrate how to work with various types of Future.
 /// See [synchronous examples](crate::Scheduler) for more examples of how to schedule tasks.
 ///
 /// ```rust
@@ -195,7 +199,7 @@ where
     ///
     /// 1. Pass the result of `scheduler.run_pending()` to your runtime's `spawn` function. This might
     ///    result in multiple invocations of the same task running concurrently.
-    /// 2. Use `spawn` or `spawn_blocking` in your task itself. This has the same concurrent execution risk 
+    /// 2. Use `spawn` or `spawn_blocking` in your task itself. This has the same concurrent execution risk
     ///    as approach 1, but limited to that specific task.
     /// 3. Use `tokio::time::timeout` or equivalent to prevent `scheduler.run_pending()` or the task itself
     ///    from running more than an expected amount of time. E.g.
@@ -221,14 +225,12 @@ where
                 }
             }
         }
-        AsyncSchedulerFuture {
-            futures
-        }
+        AsyncSchedulerFuture { futures }
     }
 }
 
 pub struct AsyncSchedulerFuture {
-    futures: Vec<Option<Pin<JobFuture>>>
+    futures: Vec<Option<Pin<JobFuture>>>,
 }
 
 impl Future for AsyncSchedulerFuture {
@@ -236,7 +238,7 @@ impl Future for AsyncSchedulerFuture {
 
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         let mut all_done = true;
-        
+
         for future in &mut self.get_mut().futures {
             if let Some(this_future) = future {
                 if this_future.as_mut().poll(cx) == Poll::Ready(()) {
@@ -253,4 +255,3 @@ impl Future for AsyncSchedulerFuture {
         }
     }
 }
-

@@ -14,23 +14,23 @@
 //!
 //! ## Similar libraries
 //! * [schedule-rs](https://github.com/mehcode/schedule-rs) and [job_scheduler](https://github.com/lholden/job_scheduler) are two other Rust scheduler libraries. Both use `cron` syntax for scheduling.
-mod intervals;
-mod sync_job;
-mod job;
-mod job_schedule;
-mod scheduler;
 #[cfg(feature = "async")]
 mod async_job;
 #[cfg(feature = "async")]
 mod async_scheduler;
+mod intervals;
+mod job;
+mod job_schedule;
+mod scheduler;
+mod sync_job;
 pub mod timeprovider;
 
 pub use crate::intervals::{Interval, NextTime, TimeUnits};
-pub use crate::sync_job::SyncJob;
-pub use crate::scheduler::{ScheduleHandle, Scheduler};
 pub use crate::job::Job;
+pub use crate::scheduler::{ScheduleHandle, Scheduler};
+pub use crate::sync_job::SyncJob;
 
 #[cfg(feature = "async")]
-pub use crate::async_scheduler::AsyncScheduler;
-#[cfg(feature = "async")]
 pub use crate::async_job::AsyncJob;
+#[cfg(feature = "async")]
+pub use crate::async_scheduler::AsyncScheduler;

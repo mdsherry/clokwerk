@@ -1,12 +1,19 @@
-
 use std::{fmt, marker::PhantomData};
 
 use chrono::{DateTime, Local, NaiveTime, TimeZone};
 
-use crate::{Interval, NextTime, intervals::{RunConfig, parse_time}, timeprovider::{ChronoTimeProvider, TimeProvider}};
+use crate::{
+    intervals::{parse_time, RunConfig},
+    timeprovider::{ChronoTimeProvider, TimeProvider},
+    Interval, NextTime,
+};
 
 #[doc(hidden)]
-pub trait WithSchedule<Tz, Tp> where Tz: TimeZone, Tp: TimeProvider {
+pub trait WithSchedule<Tz, Tp>
+where
+    Tz: TimeZone,
+    Tp: TimeProvider,
+{
     fn schedule_mut(&mut self) -> &mut JobSchedule<Tz, Tp>;
     fn schedule(&self) -> &JobSchedule<Tz, Tp>;
 }
@@ -15,16 +22,21 @@ pub struct Repeating<'a, T, Tz, Tp> {
     job: &'a mut T,
     interval: Interval,
     _tz: PhantomData<Tz>,
-    _tp: PhantomData<Tp>
+    _tp: PhantomData<Tp>,
 }
 
-impl<'a, T, Tz, Tp> Repeating<'a, T, Tz, Tp> where T: WithSchedule<Tz, Tp>, Tz: TimeZone, Tp: TimeProvider {
+impl<'a, T, Tz, Tp> Repeating<'a, T, Tz, Tp>
+where
+    T: WithSchedule<Tz, Tp>,
+    Tz: TimeZone,
+    Tp: TimeProvider,
+{
     pub(crate) fn new(job: &'a mut T, interval: Interval) -> Repeating<'a, T, Tz, Tp> {
         Self {
             job,
             interval,
             _tz: PhantomData,
-            _tp: PhantomData
+            _tp: PhantomData,
         }
     }
     /// Indicate the number of additoinal times the job should be run every time it's scheduled.
@@ -68,7 +80,6 @@ where
     tz: Tz,
     _tp: PhantomData<Tp>,
 }
-
 
 impl<Tz, Tp> fmt::Debug for JobSchedule<Tz, Tp>
 where
@@ -165,10 +176,8 @@ where
         self.run_count != RunCount::Never
     }
 
-
     /// Specify a task to run, and schedule its next run
-    pub fn start_schedule(&mut self) -> &mut Self
-    {
+    pub fn start_schedule(&mut self) -> &mut Self {
         if let None = self.next_run {
             let now = Tp::now(&self.tz);
             self.next_run = self.next_run_time(&now);
@@ -246,11 +255,10 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::JobSchedule;
-    use crate::{SyncJob, intervals::*, timeprovider::TimeProvider, Job};
+    use crate::{intervals::*, timeprovider::TimeProvider, Job, SyncJob};
     use chrono::prelude::*;
 
     #[test]
@@ -274,7 +282,7 @@ mod test {
         assert!(!job.is_pending(&utc_hms(7, 59, 0)));
         assert!(job.is_pending(&utc_hms(8, 0, 0)));
         job.execute(&utc_hms(8, 0, 0));
-        
+
         assert!(!job.is_pending(&utc_hms(8, 44, 0)));
         assert!(job.is_pending(&utc_hms(8, 45, 0)));
         job.execute(&utc_hms(8, 45, 0));

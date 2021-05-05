@@ -1,11 +1,14 @@
-use crate::{job_schedule::{Repeating, WithSchedule}};
+use crate::job_schedule::{Repeating, WithSchedule};
 
-use crate::{Interval, timeprovider::TimeProvider};
+use crate::{timeprovider::TimeProvider, Interval};
 use chrono::prelude::*;
 
 /// This trait provides an abstraction over [`SyncJob`](crate::SyncJob) and [`AsyncJob`](crate::AsyncJob), covering all the methods relating to scheduling, rather than execution.
-pub trait Job<Tz, Tp> : WithSchedule<Tz, Tp> + Sized where Tz: TimeZone + Sync + Send, Tp: TimeProvider {
-
+pub trait Job<Tz, Tp>: WithSchedule<Tz, Tp> + Sized
+where
+    Tz: TimeZone + Sync + Send,
+    Tp: TimeProvider,
+{
     /// Specify the time of day when a task should run, e.g.
     /// ```rust
     /// # use clokwerk::*;
@@ -22,7 +25,8 @@ pub trait Job<Tz, Tp> : WithSchedule<Tz, Tp> + Sized where Tz: TimeZone + Sync +
     ///
     /// This method is mutually exclusive with [`Job::plus()`].
     fn at(&mut self, time: &str) -> &mut Self {
-        self.schedule_mut().try_at(time)
+        self.schedule_mut()
+            .try_at(time)
             .expect("Could not convert value into a time");
         self
     }
@@ -69,7 +73,7 @@ pub trait Job<Tz, Tp> : WithSchedule<Tz, Tp> + Sized where Tz: TimeZone + Sync +
     /// Mutually exclusive with [`Job::at()`].
     ///
     /// Note that this normally won't change the frequency with which a task runs, merely its timing.
-    /// For instance, 
+    /// For instance,
     /// ```rust
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
@@ -88,7 +92,7 @@ pub trait Job<Tz, Tp> : WithSchedule<Tz, Tp> + Sized where Tz: TimeZone + Sync +
     /// scheduler.every(90.minutes())
     ///   .run(|| println!("Time to wake up!"));
     /// ```
-    /// 
+    ///
     /// If the total offset exceeds the base frequency, the resulting behaviour can be unintuitive. For example,
     /// ```rust
     /// # use clokwerk::*;
@@ -194,4 +198,3 @@ pub trait Job<Tz, Tp> : WithSchedule<Tz, Tp> + Sized where Tz: TimeZone + Sync +
         self.schedule().is_pending(now)
     }
 }
-

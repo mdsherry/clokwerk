@@ -2,7 +2,12 @@ use std::{fmt, future::Future, pin::Pin};
 
 use chrono::{DateTime, Local, TimeZone};
 
-use crate::{Interval, job::Job, job_schedule::{JobSchedule, WithSchedule}, timeprovider::{ChronoTimeProvider, TimeProvider}};
+use crate::{
+    job::Job,
+    job_schedule::{JobSchedule, WithSchedule},
+    timeprovider::{ChronoTimeProvider, TimeProvider},
+    Interval,
+};
 
 pub type JobFuture = Box<dyn Future<Output = ()> + Send + 'static>;
 /// An asynchronous job to run on the scheduler.
@@ -22,27 +27,43 @@ trait GiveMeAPinnedFuture {
     fn get_pinned(&mut self) -> Pin<JobFuture>;
 }
 
-struct JobWrapper<F, T> where F: FnMut() -> T, T: Future {
-    f: F
+struct JobWrapper<F, T>
+where
+    F: FnMut() -> T,
+    T: Future,
+{
+    f: F,
 }
 
-impl<F, T> JobWrapper<F, T> where F: FnMut() -> T, T: Future {
+impl<F, T> JobWrapper<F, T>
+where
+    F: FnMut() -> T,
+    T: Future,
+{
     fn new(f: F) -> Self {
         JobWrapper { f }
     }
 }
 
-impl<F, T> GiveMeAPinnedFuture for JobWrapper<F, T> where F: FnMut() -> T, T: Future<Output = ()> + Send + 'static {
+impl<F, T> GiveMeAPinnedFuture for JobWrapper<F, T>
+where
+    F: FnMut() -> T,
+    T: Future<Output = ()> + Send + 'static,
+{
     fn get_pinned(&mut self) -> Pin<JobFuture> {
         Box::pin((self.f)())
     }
 }
 
-impl<Tz, Tp> WithSchedule<Tz, Tp> for AsyncJob<Tz, Tp> where  Tz: TimeZone, Tp: TimeProvider {
+impl<Tz, Tp> WithSchedule<Tz, Tp> for AsyncJob<Tz, Tp>
+where
+    Tz: TimeZone,
+    Tp: TimeProvider,
+{
     fn schedule_mut(&mut self) -> &mut JobSchedule<Tz, Tp> {
         &mut self.schedule
     }
-    
+
     fn schedule(&self) -> &JobSchedule<Tz, Tp> {
         &self.schedule
     }
@@ -58,7 +79,12 @@ where
     }
 }
 
-impl<Tz, Tp> Job<Tz, Tp> for AsyncJob<Tz, Tp> where Tz: TimeZone + Sync + Send, Tp: TimeProvider {}
+impl<Tz, Tp> Job<Tz, Tp> for AsyncJob<Tz, Tp>
+where
+    Tz: TimeZone + Sync + Send,
+    Tp: TimeProvider,
+{
+}
 
 impl<Tz, Tp> AsyncJob<Tz, Tp>
 where
@@ -68,7 +94,7 @@ where
     pub(crate) fn new(ival: Interval, tz: Tz) -> Self {
         AsyncJob {
             schedule: JobSchedule::new(ival, tz),
-            job: None
+            job: None,
         }
     }
 
@@ -77,7 +103,8 @@ where
     /// The function passed into this method should return a value implementing `Future<Output = ()>`.
     pub fn run<F, T>(&mut self, f: F) -> &mut Self
     where
-        F: 'static + FnMut() -> T + Send, T: 'static + Future<Output = ()> + Send
+        F: 'static + FnMut() -> T + Send,
+        T: 'static + Future<Output = ()> + Send,
     {
         self.job = Some(Box::new(JobWrapper::new(f)));
         self.schedule.start_schedule();
