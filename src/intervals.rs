@@ -56,6 +56,10 @@ pub(crate) struct RunConfig {
     adjustment: Option<Adjustment>,
 }
 
+/// A RunConfig defines a schedule for a recurring event. It's composed of a base [`Interval`], and an additional adjustment.
+/// The adjustment is either a single day offset (e.g. "at 3 AM") for use in conjunction with a base interval like "every three days", or "every Tuesday",
+/// or it's a sequence of additional intervals, with the intended use of providing an additional offset for the scheduled task e.g.
+/// "Every three hours, plus 30 minutes, plus 10 seconds".
 impl RunConfig {
     pub fn from_interval(base: Interval) -> Self {
         RunConfig {
@@ -89,7 +93,7 @@ impl RunConfig {
             None => from.clone(),
             Some(Adjustment::Time(ref t)) => {
                 let from_time = from.time();
-                if *t > from_time {
+                if *t >= from_time {
                     from.date().and_time(t.clone()).unwrap()
                 } else {
                     (from.date() + Duration::days(1))
@@ -364,9 +368,8 @@ impl TimeUnits for u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::intervals::NextTime;
+    use crate::intervals::{NextTime, RunConfig};
     use crate::Interval::*;
-    use crate::RunConfig;
     use crate::TimeUnits;
     use chrono::prelude::*;
 
@@ -582,5 +585,15 @@ mod tests {
         assert_eq!(0.days().prev(&dt), dt, "prev 0 days");
         assert_eq!(0.weeks().next(&dt), dt, "next 0 weeks");
         assert_eq!(0.weeks().prev(&dt), dt, "prev 0 weeks");
+    }
+
+    #[test]
+    fn test_daily_interval_plus_time_of_midnight() {
+        // See https://github.com/mdsherry/clokwerk/issues/22
+        let dt = DateTime::parse_from_rfc3339("2018-09-04T14:22:13-00:00").unwrap();
+        let rc = RunConfig::from_interval(Tuesday).with_time(NaiveTime::from_hms(0, 0, 0));
+        let next_dt = rc.next(&dt);
+        let expected = DateTime::parse_from_rfc3339("2018-09-11T00:00:00-00:00").unwrap();
+        assert_eq!(next_dt, expected);
     }
 }

@@ -1,6 +1,6 @@
-use crate::timeprovider::{ChronoTimeProvider, TimeProvider};
+use crate::{Job, timeprovider::{ChronoTimeProvider, TimeProvider}};
 use crate::Interval;
-use crate::Job;
+use crate::SyncJob;
 use std::default::Default;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
@@ -8,14 +8,81 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-/// Job scheduler
+/// Synchronous job scheduler
+///
+/// ### Usage examples
+/// ```rust
+/// // Scheduler, trait for .seconds(), .minutes(), etc., and trait with job scheduling methods
+/// use clokwerk::{Scheduler, TimeUnits, Job};
+/// // Import week days and WeekDay
+/// use clokwerk::Interval::*;
+/// use std::thread;
+/// use std::time::Duration;
+///
+/// // Create a new scheduler
+/// let mut scheduler = Scheduler::new();
+/// // or a scheduler with a given timezone
+/// let mut scheduler = Scheduler::with_tz(chrono::Utc);
+/// // Add some tasks to it
+/// scheduler
+///     .every(10.minutes())
+///         .plus(30.seconds())
+///     .run(|| println!("Periodic task"));
+/// scheduler
+///     .every(1.day())
+///         .at("3:20 pm")
+///     .run(|| println!("Daily task"));
+/// scheduler
+///     .every(Wednesday)
+///         .at("14:20:17")
+///     .run(|| println!("Weekly task"));
+/// scheduler
+///     .every(Tuesday)
+///         .at("14:20:17")
+///     .and_every(Thursday)
+///         .at("15:00")
+///     .run(|| println!("Biweekly task"));
+/// scheduler
+///     .every(Weekday)
+///     .run(|| println!("Every weekday at midnight"));
+/// scheduler
+///     .every(1.day())
+///         .at("3:20 pm")
+///     .run(|| println!("I only run once")).once();
+/// scheduler
+///     .every(Weekday)
+///         .at("12:00").count(10)
+///     .run(|| println!("Countdown"));
+/// scheduler
+///     .every(1.day())
+///         .at("10:00 am")
+///         .repeating_every(30.minutes())
+///             .times(6)
+///     .run(|| println!("I run every half hour from 10 AM to 1 PM inclusive."));
+/// scheduler
+///     .every(1.day())
+///         .at_time(chrono::NaiveTime::from_hms(13, 12, 14))
+///     .run(|| println!("You can also pass chrono::NaiveTimes to `at_time`."));
+///
+/// // Manually run the scheduler in an event loop
+/// for _ in 1..10 {
+///     scheduler.run_pending();
+///     thread::sleep(Duration::from_millis(10));
+///     # break;
+/// }
+///
+/// // Or run it in a background thread
+/// let thread_handle = scheduler.watch_thread(Duration::from_millis(100));
+/// // The scheduler stops when `thread_handle` is dropped, or `stop` is called
+/// thread_handle.stop();
+/// ```
 #[derive(Debug)]
 pub struct Scheduler<Tz = chrono::Local, Tp = ChronoTimeProvider>
 where
     Tz: chrono::TimeZone,
     Tp: TimeProvider,
 {
-    jobs: Vec<Job<Tz, Tp>>,
+    jobs: Vec<SyncJob<Tz, Tp>>,
     tz: Tz,
     _tp: PhantomData<Tp>,
 }
@@ -74,8 +141,8 @@ where
     /// scheduler.every(Wednesday).at("14:20:17").run(|| println!("Weekly task"));
     /// scheduler.every(Weekday).run(|| println!("Every weekday at midnight"));
     /// ```
-    pub fn every(&mut self, ival: Interval) -> &mut Job<Tz, Tp> {
-        let job = Job::<Tz, Tp>::new(ival, self.tz.clone());
+    pub fn every(&mut self, ival: Interval) -> &mut SyncJob<Tz, Tp> {
+        let job = SyncJob::<Tz, Tp>::new(ival, self.tz.clone());
         self.jobs.push(job);
         let last_index = self.jobs.len() - 1;
         &mut self.jobs[last_index]
@@ -164,7 +231,7 @@ impl Drop for ScheduleHandle {
 
 #[cfg(test)]
 mod tests {
-    use super::{Scheduler, TimeProvider};
+    use super::{Scheduler, TimeProvider, Job};
     use crate::intervals::*;
     use std::sync::{atomic::AtomicU32, atomic::Ordering, Arc};
 

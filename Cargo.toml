@@ -1,6 +1,6 @@
 [package]
 name = "clokwerk"
-version = "0.3.4"
+version = "0.4.0"
 authors = ["Mark Sherry <mdsherry@gmail.com>"]
 documentation = "http://docs.rs/clokwerk/"
 description="A simple Rust recurring task scheduler, similar to Python's schedule"
@@ -16,3 +16,10 @@ chrono = "0.4"
 
 [dev-dependencies]
 once_cell = "1.2"
+tokio = { version="1.5", features=["rt", "time"]}
+async-std = "1.9"
+tokio-test = "0.4"
+
+[features]
+default = ["async"]
+async = []

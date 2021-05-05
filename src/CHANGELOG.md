@@ -1,3 +1,15 @@
+## 0.4.0
+Multiple breaking changes:
+* `Job` renamed to `SyncJob`
+* Job scheduling methods moved to the new `Job` trait. Existing code will need to add e.g. `use clokwerk::Job as _`
+
+New features:
+* Added `AsyncScheduler` and `AsyncJob` to provide a simple way for working with `async`/`Future`s.
+  This adds no new dependencies, and this feature is gated behind the `async` feature (enabled by default).
+
+Bug fixes:
+* Combining `.at("00:00")` with an interval that aligns with midnight (for example, `every(1.day())`) will no longer wait until the *following* midnight to run.
+
 ## 0.3.4
 * Times returned by `Interval::next` and `Interval::prev` now have nanoseconds set to 0; previously, the nanoseconds of the current time would be used.
 * Improve documentation on `Scheduler::watch_thread`.

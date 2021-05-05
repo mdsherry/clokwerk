@@ -1,83 +1,10 @@
-use crate::intervals::NextTime;
-use crate::Interval;
-use crate::RunConfig;
-use crate::{
-    intervals::parse_time,
-    timeprovider::{ChronoTimeProvider, TimeProvider},
-};
+use crate::{job_schedule::{Repeating, WithSchedule}};
+
+use crate::{Interval, timeprovider::TimeProvider};
 use chrono::prelude::*;
-use std::fmt::{self, Debug};
-use std::marker::PhantomData;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RunCount {
-    Never,
-    Times(usize),
-    Forever,
-}
-
-#[derive(Debug, Clone)]
-struct RepeatConfig {
-    repeats: usize,
-    repeat_interval: Interval,
-    repeats_left: usize,
-}
-
-/// A job to run on the scheduler.
-/// Create these by calling [`Scheduler::every()`](::Scheduler::every).
-pub struct Job<Tz = Local, Tp = ChronoTimeProvider>
-where
-    Tz: TimeZone,
-    Tp: TimeProvider,
-{
-    frequency: Vec<RunConfig>,
-    next_run: Option<DateTime<Tz>>,
-    last_run: Option<DateTime<Tz>>,
-    job: Option<Box<dyn FnMut() + Send>>,
-    run_count: RunCount,
-    repeat_config: Option<RepeatConfig>,
-    tz: Tz,
-    _tp: PhantomData<Tp>,
-}
-
-impl<Tz, Tp> fmt::Debug for Job<Tz, Tp>
-where
-    Tz: TimeZone,
-    Tp: TimeProvider,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Job")
-            .field("frequency", &self.frequency)
-            .field("next_run", &self.next_run)
-            .field("last_run", &self.last_run)
-            .field("run_count", &self.run_count)
-            .field("repeat_config", &self.repeat_config)
-            .finish()
-    }
-}
-
-impl<Tz, Tp> Job<Tz, Tp>
-where
-    Tz: chrono::TimeZone + Sync + Send,
-    Tp: TimeProvider,
-{
-    pub(crate) fn new(ival: Interval, tz: Tz) -> Self {
-        Job {
-            frequency: vec![RunConfig::from_interval(ival)],
-            next_run: None,
-            last_run: None,
-            job: None,
-            run_count: RunCount::Forever,
-            repeat_config: None,
-            tz,
-            _tp: PhantomData,
-        }
-    }
-
-    fn last_frequency(&mut self) -> &mut RunConfig {
-        let last_idx = self.frequency.len() - 1;
-        &mut self.frequency[last_idx]
-    }
+/// This trait provides an abstraction over [`SyncJob`](crate::SyncJob) and [`AsyncJob`](crate::AsyncJob), covering all the methods relating to scheduling, rather than execution.
+pub trait Job<Tz, Tp> : WithSchedule<Tz, Tp> + Sized where Tz: TimeZone + Sync + Send, Tp: TimeProvider {
 
     /// Specify the time of day when a task should run, e.g.
     /// ```rust
@@ -94,9 +21,10 @@ where
     /// If the value comes from an untrusted source, e.g. user input, [`Job::try_at`] will return a result instead.
     ///
     /// This method is mutually exclusive with [`Job::plus()`].
-    pub fn at(&mut self, time: &str) -> &mut Self {
-        self.try_at(time)
-            .expect("Could not convert value into a time")
+    fn at(&mut self, time: &str) -> &mut Self {
+        self.schedule_mut().try_at(time)
+            .expect("Could not convert value into a time");
+        self
     }
 
     /// Identical to [`Job::at`] except that it returns a Result instead of panicking if the conversion failed.
@@ -109,8 +37,9 @@ where
     /// ```
     /// Times can be specified with or without seconds, and in either 24-hour or 12-hour time.
     /// Mutually exclusive with [`Job::plus()`].
-    pub fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError> {
-        Ok(self.at_time(parse_time(time)?))
+    fn try_at(&mut self, time: &str) -> Result<&mut Self, chrono::ParseError> {
+        self.schedule_mut().try_at(time)?;
+        Ok(self)
     }
 
     /// Similar to [`Job::at`], but it takes a chrono::NaiveTime instead of a `&str`.
@@ -123,14 +52,11 @@ where
     /// scheduler.every(Weekday).at_time(NaiveTime::from_hms(23, 42, 16)).run(|| println!("Also works with NaiveTime"));
     /// ```
 
-    pub fn at_time(&mut self, time: NaiveTime) -> &mut Self {
-        {
-            let frequency = self.last_frequency();
-            *frequency = frequency.with_time(time);
-        }
+    fn at_time(&mut self, time: NaiveTime) -> &mut Self {
+        self.schedule_mut().at_time(time);
         self
     }
-    /// Add additional precision time to when a task should run, e.g.
+    /// Specifies an offset to when a task should run, e.g.
     /// ```rust
     /// # use clokwerk::*;
     /// # use clokwerk::Interval::*;
@@ -141,44 +67,75 @@ where
     ///   .run(|| println!("Time to wake up!"));
     /// ```
     /// Mutually exclusive with [`Job::at()`].
-    pub fn plus(&mut self, ival: Interval) -> &mut Self {
-        {
-            let frequency = self.last_frequency();
-            *frequency = frequency.with_subinterval(ival);
-        }
+    ///
+    /// Note that this normally won't change the frequency with which a task runs, merely its timing.
+    /// For instance, 
+    /// ```rust
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// # let mut scheduler = Scheduler::new();
+    /// scheduler.every(1.hour())
+    ///     .plus(30.minutes())
+    ///   .run(|| println!("Time to wake up!"));
+    /// ```
+    /// will run at 00:30, 01:30, 02:30, etc., rather than at 00:00, 01:30, 03:00, etc.
+    ///
+    /// If that schedule is desired, then one would need to write
+    /// ```rust
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// # let mut scheduler = Scheduler::new();
+    /// scheduler.every(90.minutes())
+    ///   .run(|| println!("Time to wake up!"));
+    /// ```
+    /// 
+    /// If the total offset exceeds the base frequency, the resulting behaviour can be unintuitive. For example,
+    /// ```rust
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// # let mut scheduler = Scheduler::new();
+    /// scheduler.every(1.hour())
+    ///   .plus(90.minutes())
+    ///   .run(|| println!("Time to wake up!"));
+    /// ```
+    /// will run at 01:30, 02:30, 03:30, etc., while
+    /// ```rust
+    /// # use clokwerk::*;
+    /// # use clokwerk::Interval::*;
+    /// # let mut scheduler = Scheduler::new();
+    /// scheduler.every(1.hour())
+    ///   .plus(125.minutes())
+    ///   .run(|| println!("Time to wake up!"));
+    /// ```
+    /// will run at 02:05, 04:05, 06:05, etc.
+    fn plus(&mut self, ival: Interval) -> &mut Self {
+        self.schedule_mut().plus(ival);
         self
     }
 
     /// Add an additional scheduling to the task. All schedules will be considered when determining
     /// when the task should next run.
-    pub fn and_every(&mut self, ival: Interval) -> &mut Self {
-        self.frequency.push(RunConfig::from_interval(ival));
+    fn and_every(&mut self, ival: Interval) -> &mut Self {
+        self.schedule_mut().and_every(ival);
         self
     }
 
     /// Execute the job only once. Equivalent to `_.count(1)`.
-    pub fn once(&mut self) -> &mut Self {
-        self.run_count = RunCount::Times(1);
+    fn once(&mut self) -> &mut Self {
+        self.schedule_mut().once();
         self
     }
 
     /// Execute the job forever. This is the default behaviour.
-    pub fn forever(&mut self) -> &mut Self {
-        self.run_count = RunCount::Forever;
+    fn forever(&mut self) -> &mut Self {
+        self.schedule_mut().forever();
         self
     }
 
     /// Execute the job only `count` times.
-    pub fn count(&mut self, count: usize) -> &mut Self {
-        self.run_count = RunCount::Times(count);
+    fn count(&mut self, count: usize) -> &mut Self {
+        self.schedule_mut().count(count);
         self
-    }
-
-    fn next_run_time(&self, now: &DateTime<Tz>) -> Option<DateTime<Tz>> {
-        match self.run_count {
-            RunCount::Never => None,
-            _ => self.frequency.iter().map(|freq| freq.next(now)).min(),
-        }
     }
 
     /// After running once, run again with the specified interval.
@@ -227,174 +184,14 @@ where
     ///   .run(|| println!("Hello"));
     /// ```
     /// If this is scheduled to run at 6 AM, it will print `Hello` at 6:00, 6:45, and 7:30, and then again at 8:00, 8:45, 9:30, etc.
-    pub fn repeating_every(&mut self, interval: Interval) -> Repeating<Tz, Tp> {
-        Repeating {
-            job: self,
-            interval,
-        }
-    }
-
-    /// Specify a task to run, and schedule its next run
-    pub fn run<F>(&mut self, f: F) -> &mut Self
-    where
-        F: 'static + FnMut() + Send,
-    {
-        self.job = Some(Box::new(f));
-        if let None = self.next_run {
-            let now = Tp::now(&self.tz);
-            self.next_run = self.next_run_time(&now);
-            match &mut self.repeat_config {
-                Some(RepeatConfig {
-                    repeats,
-                    repeats_left,
-                    ..
-                }) => {
-                    *repeats_left = *repeats;
-                }
-                None => (),
-            }
-        }
-        self
+    fn repeating_every(&mut self, interval: Interval) -> Repeating<Self, Tz, Tp> {
+        Repeating::new(self, interval)
     }
 
     /// Test whether a job is scheduled to run again. This is usually only called by
-    /// [Scheduler::run_pending()](::Scheduler::run_pending).
-    pub fn is_pending(&self, now: &DateTime<Tz>) -> bool {
-        match &self.next_run {
-            Some(dt) => *dt <= *now,
-            None => false,
-        }
-    }
-
-    /// Run a task and re-schedule it. This is usually only called by
-    /// [Scheduler::run_pending()](::Scheduler::run_pending).
-    pub fn execute(&mut self, now: &DateTime<Tz>) {
-        // Don't do anything if we're run out of runs
-        if self.run_count == RunCount::Never {
-            return;
-        }
-        if let Some(ref mut f) = self.job {
-            f();
-        }
-
-        // We compute this up front since we can't borrow self immutably while doing this next bit
-        let next_run_time = self.next_run_time(now);
-        match &mut self.repeat_config {
-            Some(RepeatConfig {
-                repeats,
-                repeats_left,
-                repeat_interval,
-            }) => {
-                if *repeats_left > 0 {
-                    *repeats_left -= 1;
-                    // Normal scheduling is aligned with the day: if you ask for something every hour, it will
-                    // run at the start of the next hour, not one hour after being scheduled.
-                    // For repeats, though, we want them aligned the first run of the repeats.
-                    // This means we want to align with with next_run (which should be not far in the past),
-                    // or if it's somehow unavailable, the current time.
-                    // It's possible that we're really far behind. If so, find the next repeat interval that's
-                    // still in the future (relative to when we start this run.)
-                    let mut next = self.next_run.as_ref().unwrap_or(now).clone();
-                    loop {
-                        next = repeat_interval.next_from(&next);
-                        if next > *now {
-                            break;
-                        }
-                    }
-                    self.next_run = Some(next);
-                } else {
-                    self.next_run = next_run_time;
-                    *repeats_left = *repeats;
-                }
-            }
-            None => self.next_run = next_run_time,
-        }
-
-        self.last_run = Some(now.clone());
-        self.run_count = match self.run_count {
-            RunCount::Never => RunCount::Never,
-            RunCount::Times(n) if n > 1 => RunCount::Times(n - 1),
-            RunCount::Times(_) => RunCount::Never,
-            RunCount::Forever => RunCount::Forever,
-        };
+    /// [Scheduler::run_pending()](crate::Scheduler::run_pending).
+    fn is_pending(&self, now: &DateTime<Tz>) -> bool {
+        self.schedule().is_pending(now)
     }
 }
 
-pub struct Repeating<'a, Tz: chrono::TimeZone, Tp: TimeProvider> {
-    job: &'a mut Job<Tz, Tp>,
-    interval: Interval,
-}
-
-impl<'a, Tz, Tp> Repeating<'a, Tz, Tp>
-where
-    Tz: chrono::TimeZone + Sync + Send,
-    Tp: TimeProvider,
-{
-    /// Indicate the number of additoinal times the job should be run every time it's scheduled.
-    /// Passing a value of 0 here is the same as not specifying a repeat at all.
-    pub fn times(self, n: usize) -> &'a mut Job<Tz, Tp> {
-        if n >= 1 {
-            self.job.repeat_config = Some(RepeatConfig {
-                repeats: n,
-                repeat_interval: self.interval,
-                repeats_left: 0,
-            });
-        }
-        self.job
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::Job;
-    use crate::{intervals::*, timeprovider::TimeProvider};
-    use chrono::prelude::*;
-
-    #[test]
-    fn test_repeating() {
-        fn utc_hms(h: u32, m: u32, s: u32) -> DateTime<Utc> {
-            Utc.from_utc_datetime(&NaiveDate::from_ymd(2020, 6, 16).and_hms(h, m, s))
-        }
-        struct TestTimeProvider;
-        impl TimeProvider for TestTimeProvider {
-            fn now<Tz>(tz: &Tz) -> chrono::DateTime<Tz>
-            where
-                Tz: chrono::TimeZone + Sync + Send,
-            {
-                utc_hms(7, 58, 0).with_timezone(tz)
-            }
-        }
-        let mut job = Job::<Utc, TestTimeProvider>::new(1.hour(), Utc);
-        job.repeating_every(45.minutes()).times(2).run(|| ());
-
-        assert!(!job.is_pending(&utc_hms(7, 59, 0)));
-        assert!(job.is_pending(&utc_hms(8, 0, 0)));
-        job.execute(&utc_hms(8, 0, 0));
-        println!("{:?}", job.next_run);
-
-        assert!(!job.is_pending(&utc_hms(8, 44, 0)));
-        assert!(job.is_pending(&utc_hms(8, 45, 0)));
-        job.execute(&utc_hms(8, 45, 0));
-
-        // Skips 9:00 because it's still repeating at 45 minutes
-        assert!(!job.is_pending(&utc_hms(9, 0, 0)));
-
-        assert!(!job.is_pending(&utc_hms(9, 29, 0)));
-        assert!(job.is_pending(&utc_hms(9, 30, 0)));
-        job.execute(&utc_hms(9, 30, 0));
-
-        assert!(!job.is_pending(&utc_hms(9, 59, 0)));
-        assert!(job.is_pending(&utc_hms(10, 0, 0)));
-    }
-
-    #[test]
-    fn test_time_coercion() {
-        let mut job = Job::<Utc>::new(1.day(), Utc);
-        // &str
-        job.try_at("12:32").unwrap();
-        // &String
-        job.try_at(&format!("{}:{}", 12, 32)).unwrap();
-        // NaiveTime
-        job.at_time(NaiveTime::from_hms(12, 32, 0));
-    }
-}
