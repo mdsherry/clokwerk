@@ -1,8 +1,9 @@
 use chrono::prelude::*;
 use chrono::Duration;
 use chrono::Weekday;
+use serde::{Deserialize, Serialize};
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum Interval {
     /// The next multiple of `n` seconds since the start of the Unix epoch
     Seconds(u32),
@@ -44,13 +45,13 @@ pub(crate) fn parse_time(s: &str) -> Result<NaiveTime, chrono::ParseError> {
         .or_else(|_| NaiveTime::parse_from_str(s, "%I:%M %p"))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 enum Adjustment {
     Intervals(Vec<Interval>),
     Time(NaiveTime),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct RunConfig {
     base: Interval,
     adjustment: Option<Adjustment>,
