@@ -1,8 +1,11 @@
 use chrono::prelude::*;
 use chrono::Duration;
 use chrono::Weekday;
+#[cfg(feature = "serde-1")]
+use serde::{Deserialize, Serialize};
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
 pub enum Interval {
     /// The next multiple of `n` seconds since the start of the Unix epoch
     Seconds(u32),
@@ -44,15 +47,18 @@ pub(crate) fn parse_time(s: &str) -> Result<NaiveTime, chrono::ParseError> {
         .or_else(|_| NaiveTime::parse_from_str(s, "%I:%M %p"))
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
 enum Adjustment {
     Intervals(Vec<Interval>),
     Time(NaiveTime),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(Serialize, Deserialize))]
 pub(crate) struct RunConfig {
     base: Interval,
+    #[cfg_attr(feature = "serde-1", serde(skip_serializing_if = "Option::is_none"))]
     adjustment: Option<Adjustment>,
 }
 
@@ -91,14 +97,12 @@ impl RunConfig {
     fn apply_adjustment<Tz: TimeZone>(&self, from: &DateTime<Tz>) -> DateTime<Tz> {
         match self.adjustment {
             None => from.clone(),
-            Some(Adjustment::Time(ref t)) => {
+            Some(Adjustment::Time(t)) => {
                 let from_time = from.time();
-                if *t >= from_time {
-                    from.date().and_time(t.clone()).unwrap()
+                if t >= from_time {
+                    from.date().and_time(t).unwrap()
                 } else {
-                    (from.date() + Duration::days(1))
-                        .and_time(t.clone())
-                        .unwrap()
+                    (from.date() + Duration::days(1)).and_time(t).unwrap()
                 }
             }
             Some(Adjustment::Intervals(ref ivals)) => {
@@ -595,5 +599,100 @@ mod tests {
         let next_dt = rc.next(&dt);
         let expected = DateTime::parse_from_rfc3339("2018-09-11T00:00:00-00:00").unwrap();
         assert_eq!(next_dt, expected);
+    }
+}
+#[cfg(all(test, feature = "serde-1"))]
+mod serde_tests {
+    use chrono::NaiveTime;
+
+    use super::{Adjustment, Interval, RunConfig};
+
+    // Tests to guard against breaking changes to the serialization formats
+    const SERIALIZED_INTERVALS: &str = r#"[{"Seconds":5},{"Minutes":10},{"Hours":15},{"Days":20},{"Weeks":30},"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday","Weekday"]"#;
+    const INTERVALS: &[Interval] = &[
+        Interval::Seconds(5),
+        Interval::Minutes(10),
+        Interval::Hours(15),
+        Interval::Days(20),
+        Interval::Weeks(30),
+        Interval::Monday,
+        Interval::Tuesday,
+        Interval::Wednesday,
+        Interval::Thursday,
+        Interval::Friday,
+        Interval::Saturday,
+        Interval::Sunday,
+        Interval::Weekday,
+    ];
+
+    #[test]
+    fn test_serialize_interval() {
+        let serialized = serde_json::to_string(&INTERVALS).unwrap();
+        assert_eq!(SERIALIZED_INTERVALS, serialized);
+    }
+
+    #[test]
+    fn test_deserialize_interval() {
+        let deserialized: Vec<Interval> = serde_json::from_str(SERIALIZED_INTERVALS).unwrap();
+        assert_eq!(INTERVALS, deserialized)
+    }
+
+    const SERIALIZED_ADJUSTMENTS: &str =
+        r#"[{"Intervals":[{"Seconds":5},"Tuesday"]},{"Time":"16:45:07"}]"#;
+    fn sample_adjustments() -> Vec<Adjustment> {
+        vec![
+            Adjustment::Intervals(vec![Interval::Seconds(5), Interval::Tuesday]),
+            Adjustment::Time(NaiveTime::from_hms(16, 45, 7)),
+        ]
+    }
+
+    #[test]
+    fn test_serialize_adjustments() {
+        let serialized = serde_json::to_string(&sample_adjustments()).unwrap();
+        assert_eq!(SERIALIZED_ADJUSTMENTS, serialized);
+    }
+
+    #[test]
+    fn test_deserialize_adjustments() {
+        let deserialized: Vec<Adjustment> = serde_json::from_str(SERIALIZED_ADJUSTMENTS).unwrap();
+        assert_eq!(sample_adjustments(), deserialized)
+    }
+
+    const SERIALIZED_RUN_CONFIG_1: &str = r#"{"base":"Thursday","adjustment":{"Time":"01:02:03"}}"#;
+    fn rc1() -> RunConfig {
+        RunConfig {
+            base: Interval::Thursday,
+            adjustment: Some(Adjustment::Time(NaiveTime::from_hms(1, 2, 3))),
+        }
+    }
+    #[test]
+    fn test_serialize_run_config_1() {
+        let serialized = serde_json::to_string(&rc1()).unwrap();
+        assert_eq!(SERIALIZED_RUN_CONFIG_1, serialized);
+    }
+
+    #[test]
+    fn test_deserialize_run_config_1() {
+        let deserialized: RunConfig = serde_json::from_str(SERIALIZED_RUN_CONFIG_1).unwrap();
+        assert_eq!(rc1(), deserialized);
+    }
+
+    const SERIALIZED_RUN_CONFIG_2: &str = r#"{"base":{"Seconds":120}}"#;
+    fn rc2() -> RunConfig {
+        RunConfig {
+            base: Interval::Seconds(120),
+            adjustment: None,
+        }
+    }
+    #[test]
+    fn test_serialize_run_config_2() {
+        let serialized = serde_json::to_string(&rc2()).unwrap();
+        assert_eq!(SERIALIZED_RUN_CONFIG_2, serialized);
+    }
+
+    #[test]
+    fn test_deserialize_run_config_2() {
+        let deserialized: RunConfig = serde_json::from_str(SERIALIZED_RUN_CONFIG_2).unwrap();
+        assert_eq!(rc2(), deserialized);
     }
 }

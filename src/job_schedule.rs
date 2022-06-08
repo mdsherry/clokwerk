@@ -178,7 +178,7 @@ where
 
     /// Specify a task to run, and schedule its next run
     pub fn start_schedule(&mut self) -> &mut Self {
-        if let None = self.next_run {
+        if self.next_run.is_none() {
             let now = Tp::now(&self.tz);
             self.next_run = self.next_run_time(&now);
             match &mut self.repeat_config {

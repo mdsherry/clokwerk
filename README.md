@@ -43,5 +43,15 @@ thread_handle.stop();
 
 See [documentation](https://docs.rs/clokwerk) for additional examples of usage.
 
+## Features
+
+Default feature:
+
+* `async`: Exposes `AsyncSchedular` and `AsyncJob`.
+
+Optional feature:
+
+* `serde-1`: Provides serialization and deserialzation for `Interval`, `RunConfig` and `Adjustment`.
+
 ## Similar libraries
 * [schedule-rs](https://github.com/mehcode/schedule-rs) and [job_scheduler](https://github.com/lholden/job_scheduler) are two other Rust scheduler libraries. Both use `cron` syntax for scheduling.
