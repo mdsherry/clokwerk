@@ -81,7 +81,9 @@ where
         if !self.schedule.can_run_again() {
             return;
         }
-        self.job.as_mut().map(|f| f());
+        if let Some(f) = self.job.as_mut() {
+            f()
+        }
         self.schedule.schedule_next(now);
     }
 }
