@@ -6,6 +6,7 @@ Multiple breaking changes:
 New features:
 * Added `AsyncScheduler` and `AsyncJob` to provide a simple way for working with `async`/`Future`s.
   This adds no new dependencies, and this feature is gated behind the `async` feature (enabled by default).
+* Added optional serde support to `RunConfig`, `Adjustment` and `Interval`
 
 Bug fixes:
 * Combining `.at("00:00")` with an interval that aligns with midnight (for example, `every(1.day())`) will no longer wait until the *following* midnight to run.

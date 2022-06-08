@@ -11,7 +11,17 @@
 //! See [`AsyncScheduler`].
 //! ## Caveats
 //! Some combinations of times or intervals are permissible, but make little sense, e.g. `every(10.seconds()).at("16:00")`, which would next run at the next 4 PM after the next multiple of 10 seconds.
-//!
+//!//! 
+//! ## Features
+//! 
+//! Default feature:
+//! 
+//! * `async`: Exposes `AsyncSchedular` and `AsyncJob`.
+//! 
+//! Optional feature:
+//! 
+//! * `serde-1`: Provides serialization and deserialzation for `Interval`, `RunConfig` and `Adjustment`.
+//! 
 //! ## Similar libraries
 //! * [schedule-rs](https://github.com/mehcode/schedule-rs) and [job_scheduler](https://github.com/lholden/job_scheduler) are two other Rust scheduler libraries. Both use `cron` syntax for scheduling.
 #[cfg(feature = "async")]
