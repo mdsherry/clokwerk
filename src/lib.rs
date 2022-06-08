@@ -11,7 +11,7 @@
 //! See [`AsyncScheduler`].
 //! ## Caveats
 //! Some combinations of times or intervals are permissible, but make little sense, e.g. `every(10.seconds()).at("16:00")`, which would next run at the next 4 PM after the next multiple of 10 seconds.
-//!//! 
+//!
 //! ## Features
 //! 
 //! Default feature:
